@@ -1,0 +1,23 @@
+# Laptop smoke profile: one UTC day, short context, four minutes-to-strike, CPU.
+# Needs `chudp download --start 2025-09-18 --end 2025-09-20` and `chudp resample` first.
+[spec]
+freq = "1m"
+context = 512
+target = "mean"
+strike_mode = "open_tick"
+minutes = "0,5,10,14"
+
+[run]
+start = "2025-09-19"
+end = "2025-09-19"
+window_chunk = 8
+batch_size = 8
+device = "cpu"
+bootstrap_days = 200
+plot = true
+trajectories = 6
+verify_settlement = true
+
+[trading]
+price = [0.5]
+tau = [0.52, 0.55]

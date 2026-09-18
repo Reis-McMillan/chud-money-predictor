@@ -1,0 +1,27 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# data, model weights, run state
+data/
+models/
+outputs/
+.run/
+*.pid
+
+# python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+build/
+dist/
+
+# editors / os
+.DS_Store
+.idea/
+.vscode/

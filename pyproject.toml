@@ -1,0 +1,68 @@
+[project]
+name = "chud-money-predictor"
+version = "0.1.0"
+description = "Zero-shot TimesFM 3.0 forecasts of the BRTI Bitcoin index, backtested as a Kalshi 15-minute trader."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "typer>=0.15",
+  "polars>=1.20",
+  "httpx>=0.28",
+  "python-dotenv>=1.0",
+  "numpy>=1.26.4",
+  "timesfm==3.0.2",
+]
+
+[project.optional-dependencies]
+# Exactly one of `cpu` / `rocm` is selected per machine (they conflict, see [tool.uv]).
+cpu = ["torch>=2.6"]
+rocm = ["torch>=2.6", "pytorch-triton-rocm; sys_platform == 'linux'"]
+viz = ["matplotlib>=3.9"]
+
+[project.scripts]
+chudp = "chud_predictor.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/chud_predictor"]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+# MI300X. Change the ROCm version to match the box's driver stack, then `uv lock`.
+name = "pytorch-rocm"
+url = "https://download.pytorch.org/whl/rocm6.4"
+explicit = true
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cpu", extra = "cpu" },
+  { index = "pytorch-rocm", extra = "rocm" },
+]
+# The ROCm torch wheel depends on this package, which only exists on the ROCm index.
+pytorch-triton-rocm = [{ index = "pytorch-rocm", extra = "rocm" }]
+
+[tool.uv]
+conflicts = [[{ extra = "cpu" }, { extra = "rocm" }]]
+
+[dependency-groups]
+dev = ["pytest>=8", "pytest-timeout>=2.3", "ruff>=0.9"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-m 'not slow' --timeout=300"
+markers = ["slow: needs the real TimesFM weights; run with CHUDP_SLOW=1 uv run pytest -m slow"]
+
+[tool.ruff]
+line-length = 130
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B"]
+ignore = ["E501"]
