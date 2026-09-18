@@ -44,6 +44,10 @@ class Settings:
     def forecasts_dir(self) -> Path:
         return self.data_dir / "forecasts"
 
+    @property
+    def finetune_dir(self) -> Path:
+        return self.data_dir / "finetune"
+
 
 def load_settings(env_file: Path | None = Path(".env"), data_dir: Path | None = None) -> Settings:
     """Load `.env` (if present) then the process environment. Explicit env vars win over .env."""

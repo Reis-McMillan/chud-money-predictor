@@ -1,4 +1,4 @@
-.PHONY: creds pf pf-stop pf-status sync-cpu sync-rocm download bars backtest-kalshi smoke test test-slow lint
+.PHONY: creds pf pf-stop pf-status sync-cpu sync-rocm download bars backtest-kalshi finetune smoke test test-slow lint
 
 # --- credentials & connectivity ------------------------------------------------
 creds:            ## fetch the QuestDB password from the cluster into .env
@@ -29,6 +29,9 @@ bars:
 
 backtest-kalshi:
 	uv run chudp backtest-kalshi --config configs/kalshi_full.toml $(ARGS)
+
+finetune:         ## fine-tune on train, select on validation, score test once
+	uv run chudp finetune --config configs/finetune.toml $(ARGS)
 
 smoke:            ## 1-day CPU smoke run (needs data for 2025-09-19 downloaded)
 	uv run chudp backtest-kalshi --config configs/kalshi_smoke.toml $(ARGS)

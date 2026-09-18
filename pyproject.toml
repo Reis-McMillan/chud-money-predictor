@@ -16,7 +16,7 @@ dependencies = [
 [project.optional-dependencies]
 # Exactly one of `cpu` / `rocm` is selected per machine (they conflict, see [tool.uv]).
 cpu = ["torch>=2.6"]
-rocm = ["torch>=2.6", "pytorch-triton-rocm; sys_platform == 'linux'"]
+rocm = ["torch>=2.6", "triton-rocm; sys_platform == 'linux'"]
 viz = ["matplotlib>=3.9"]
 
 [project.scripts]
@@ -37,7 +37,7 @@ explicit = true
 [[tool.uv.index]]
 # MI300X. Change the ROCm version to match the box's driver stack, then `uv lock`.
 name = "pytorch-rocm"
-url = "https://download.pytorch.org/whl/rocm6.4"
+url = "https://download.pytorch.org/whl/rocm7.2"
 explicit = true
 
 [tool.uv.sources]
@@ -45,8 +45,9 @@ torch = [
   { index = "pytorch-cpu", extra = "cpu" },
   { index = "pytorch-rocm", extra = "rocm" },
 ]
-# The ROCm torch wheel depends on this package, which only exists on the ROCm index.
-pytorch-triton-rocm = [{ index = "pytorch-rocm", extra = "rocm" }]
+# The ROCm torch wheel depends on this package (torch >=2.11 renamed it from pytorch-triton-rocm),
+# which only exists on the ROCm index.
+triton-rocm = [{ index = "pytorch-rocm", extra = "rocm" }]
 
 [tool.uv]
 conflicts = [[{ extra = "cpu" }, { extra = "rocm" }]]

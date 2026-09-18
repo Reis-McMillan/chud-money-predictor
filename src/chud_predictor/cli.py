@@ -219,6 +219,54 @@ def backtest_kalshi(
     typer.echo(f"run dir: {out}")
 
 
+@app.command()
+def finetune(
+    config: Annotated[Path | None, typer.Option("--config", help="TOML with a [finetune] section; flags override")] = None,
+    context: Annotated[int | None, typer.Option()] = None,
+    loss_horizon: Annotated[int | None, typer.Option(help="steps in the loss; 15 = one Kalshi window")] = None,
+    start: Annotated[str | None, typer.Option(help="clip the data before splitting, YYYY-MM-DD")] = None,
+    end: Annotated[str | None, typer.Option()] = None,
+    val_frac: Annotated[float | None, typer.Option()] = None,
+    test_frac: Annotated[float | None, typer.Option()] = None,
+    val_start: Annotated[str | None, typer.Option(help="explicit validation start (overrides the fractions)")] = None,
+    test_start: Annotated[str | None, typer.Option(help="explicit test start (overrides the fractions)")] = None,
+    embargo_bars: Annotated[int | None, typer.Option()] = None,
+    model_id: Annotated[str | None, typer.Option(help="HF repo id or a local checkpoint dir to continue from")] = None,
+    device: Annotated[str | None, typer.Option(help="auto | cpu | mps | cuda")] = None,
+    precision: Annotated[str | None, typer.Option(help="fp32 | bf16")] = None,
+    trainable: Annotated[str | None, typer.Option(help="all | head | last:N")] = None,
+    lr: Annotated[float | None, typer.Option()] = None,
+    max_steps: Annotated[int | None, typer.Option()] = None,
+    batch_size: Annotated[int | None, typer.Option(help="origins per optimiser step")] = None,
+    micro_batch: Annotated[int | None, typer.Option(help="origins per forward/backward pass")] = None,
+    eval_every: Annotated[int | None, typer.Option()] = None,
+    eval_samples: Annotated[int | None, typer.Option(help="origins scored per split; 0 = all")] = None,
+    patience: Annotated[int | None, typer.Option()] = None,
+    seed: Annotated[int | None, typer.Option()] = None,
+    run_id: Annotated[str | None, typer.Option()] = None,
+) -> None:
+    """Fine-tune TimesFM on a chronological train / validation / test split of the 1-minute bars."""
+    from .finetune import FinetuneConfig, run_finetune
+
+    if config:
+        _state["config"] = tomllib.loads(config.read_text())
+    flags = {k: v for k, v in locals().items() if k != "config" and v is not None and k in FinetuneConfig.__dataclass_fields__}
+    merged = {**_state["config"].get("finetune", {}), **flags}
+    for k in ("start", "end", "val_start", "test_start"):
+        if isinstance(merged.get(k), str):
+            merged[k] = date.fromisoformat(merged[k])
+    if merged.get("device") == "auto":
+        merged["device"] = None
+    try:
+        cfg = FinetuneConfig(**merged)
+    except TypeError as e:
+        raise typer.BadParameter(f"unknown [finetune] option: {e}") from e
+    logging.getLogger("chudp").info("resolved config: %s", cfg)
+    out = run_finetune(_settings(), cfg)
+    typer.echo((out / "summary.txt").read_text())
+    typer.echo(f"run dir: {out}")
+
+
 @app.command("rescore-kalshi")
 def rescore_kalshi(
     run_id: str,

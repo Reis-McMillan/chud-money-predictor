@@ -1,0 +1,23 @@
+# MI300X profile for `chudp finetune`. Flags override these values.
+[finetune]
+context = 4096
+loss_horizon = 15          # steps in the loss: one Kalshi window
+# Chronological split over the usable span; set val_start / test_start (YYYY-MM-DD) to pin the dates.
+val_frac = 0.15
+test_frac = 0.15
+embargo_bars = 1440        # one day between the last target of a split and the next split
+
+trainable = "all"          # all | head | last:N
+precision = "fp32"         # bf16 is ~2x faster, but inference (and evaluation) run in fp32
+lr = 1e-5
+warmup_steps = 100
+max_steps = 20000
+batch_size = 32
+# ROCm 7.2 / torch 2.14 segfaults in the fp32 backward pass somewhere above 96 origins per pass at
+# context 4096. 32 is verified; raise batch_size, not this, for a larger effective batch.
+micro_batch = 32
+
+eval_every = 200
+eval_samples = 8192
+patience = 5
+device = "auto"

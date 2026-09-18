@@ -62,8 +62,8 @@ cpu = [
     { name = "torch", version = "2.14.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'extra-20-chud-money-predictor-cpu') or (extra == 'extra-20-chud-money-predictor-cpu' and extra == 'extra-20-chud-money-predictor-rocm')" },
 ]
 rocm = [
-    { name = "pytorch-triton-rocm", marker = "sys_platform == 'linux'" },
-    { name = "torch", version = "2.9.1+rocm6.4", source = { registry = "https://download.pytorch.org/whl/rocm6.4" } },
+    { name = "torch", version = "2.14.0+rocm7.2", source = { registry = "https://download.pytorch.org/whl/rocm7.2" } },
+    { name = "triton-rocm", marker = "sys_platform == 'linux'" },
 ]
 viz = [
     { name = "matplotlib" },
@@ -83,10 +83,10 @@ requires-dist = [
     { name = "numpy", specifier = ">=1.26.4" },
     { name = "polars", specifier = ">=1.20" },
     { name = "python-dotenv", specifier = ">=1.0" },
-    { name = "pytorch-triton-rocm", marker = "sys_platform == 'linux' and extra == 'rocm'", index = "https://download.pytorch.org/whl/rocm6.4", conflict = { package = "chud-money-predictor", extra = "rocm" } },
     { name = "timesfm", specifier = "==3.0.2" },
     { name = "torch", marker = "extra == 'cpu'", specifier = ">=2.6", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "chud-money-predictor", extra = "cpu" } },
-    { name = "torch", marker = "extra == 'rocm'", specifier = ">=2.6", index = "https://download.pytorch.org/whl/rocm6.4", conflict = { package = "chud-money-predictor", extra = "rocm" } },
+    { name = "torch", marker = "extra == 'rocm'", specifier = ">=2.6", index = "https://download.pytorch.org/whl/rocm7.2", conflict = { package = "chud-money-predictor", extra = "rocm" } },
+    { name = "triton-rocm", marker = "sys_platform == 'linux' and extra == 'rocm'", index = "https://download.pytorch.org/whl/rocm7.2", conflict = { package = "chud-money-predictor", extra = "rocm" } },
     { name = "typer", specifier = ">=0.15" },
 ]
 provides-extras = ["cpu", "rocm", "viz"]
@@ -545,14 +545,6 @@ wheels = [
 ]
 
 [[package]]
-name = "pytorch-triton-rocm"
-version = "3.5.1"
-source = { registry = "https://download.pytorch.org/whl/rocm6.4" }
-wheels = [
-    { url = "https://download-r2.pytorch.org/whl/pytorch_triton_rocm-3.5.1-cp312-cp312-linux_x86_64.whl", upload-time = "2025-11-11T19:18:19Z" },
-]
-
-[[package]]
 name = "pyyaml"
 version = "6.0.3"
 source = { registry = "https://pypi.org/simple" }
@@ -687,24 +679,6 @@ wheels = [
 
 [[package]]
 name = "torch"
-version = "2.9.1+rocm6.4"
-source = { registry = "https://download.pytorch.org/whl/rocm6.4" }
-dependencies = [
-    { name = "filelock" },
-    { name = "fsspec" },
-    { name = "jinja2" },
-    { name = "networkx" },
-    { name = "pytorch-triton-rocm", marker = "sys_platform == 'linux'" },
-    { name = "setuptools" },
-    { name = "sympy" },
-    { name = "typing-extensions" },
-]
-wheels = [
-    { url = "https://download-r2.pytorch.org/whl/rocm6.4/torch-2.9.1%2Brocm6.4-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:43471c9e4520402b5feeebd6c6d180e8bf2314402925798fe219c32fecd1ef95", upload-time = "2026-01-26T16:08:29Z" },
-]
-
-[[package]]
-name = "torch"
 version = "2.14.0"
 source = { registry = "https://download.pytorch.org/whl/cpu" }
 resolution-markers = [
@@ -748,6 +722,24 @@ wheels = [
 ]
 
 [[package]]
+name = "torch"
+version = "2.14.0+rocm7.2"
+source = { registry = "https://download.pytorch.org/whl/rocm7.2" }
+dependencies = [
+    { name = "filelock" },
+    { name = "fsspec" },
+    { name = "jinja2" },
+    { name = "networkx" },
+    { name = "setuptools" },
+    { name = "sympy" },
+    { name = "triton-rocm", marker = "sys_platform == 'linux'" },
+    { name = "typing-extensions" },
+]
+wheels = [
+    { url = "https://download-r2.pytorch.org/whl/rocm7.2/torch-2.14.0%2Brocm7.2-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:d67b42e31284894d24c27bfc3fd787fbfc0bef1ea6bd906db7cfa7d53d1ffe84", upload-time = "2026-09-02T19:29:39Z" },
+]
+
+[[package]]
 name = "tqdm"
 version = "4.70.1"
 source = { registry = "https://pypi.org/simple" }
@@ -757,6 +749,14 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/0d/ea/b2a5bd54b28a324dae8211928b2d730b6547500342c7e6c6dea08bd0a485/tqdm-4.70.1.tar.gz", hash = "sha256:cefd0eca11b2a37a3aee776544d4f4ae913f02688135b5556b8788dfa474afc4", size = 171846, upload-time = "2026-09-11T07:25:16.601Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a7/03/921a3d3c75785aca9ebfbfcabfbc3a1be12e2ab5265deb026d55a5a3f83e/tqdm-4.70.1-py3-none-any.whl", hash = "sha256:c293e525e6fef9c20e8728fd4612df02a0aa31bb5fe91ecd93e123b1b7bffa73", size = 80199, upload-time = "2026-09-11T07:25:14.599Z" },
+]
+
+[[package]]
+name = "triton-rocm"
+version = "3.8.0"
+source = { registry = "https://download.pytorch.org/whl/rocm7.2" }
+wheels = [
+    { url = "https://download-r2.pytorch.org/whl/triton_rocm-3.8.0-cp312-cp312-linux_x86_64.whl", hash = "sha256:6318e6faa21395632defa13c57fa84fce5c42a79c531159911f227e599422eba", upload-time = "2026-09-02T00:55:39Z" },
 ]
 
 [[package]]

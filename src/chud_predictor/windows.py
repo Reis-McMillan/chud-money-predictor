@@ -29,7 +29,7 @@ SETTLE_OFFSET_MIN = 14
 MAX_TIMESFM_CONTEXT = 15_360
 STRIKE_MODES = ("open_tick", "open_avg60")
 
-
+# simplify to take known type... list[int] or just take set
 def parse_minutes(spec: str | tuple[int, ...] | list[int]) -> tuple[int, ...]:
     """'0-14' | '0,5,10,14' | '3-5,14' -> sorted unique tuple within 0..14."""
     if not isinstance(spec, str):

@@ -55,6 +55,35 @@ Any flag overrides the config file. Outputs land in `data/backtests/<run_id>/`: 
 `trades.parquet`, `metrics_*.parquet`, `calibration.parquet`, `bootstrap.parquet`, `meta.json`,
 and `plots/`.
 
+## Fine-tuning
+
+```bash
+uv run chudp finetune --config configs/finetune.toml              # or: make finetune
+uv run chudp finetune --config configs/finetune.toml --trainable last:4 --lr 3e-5 --max-steps 5000
+```
+
+`chudp finetune` post-trains TimesFM on the 1-minute bars (`src/chud_predictor/finetune.py`). Every
+bar with a clean context is a sample: context = the previous `context` bars, targets = the next 64.
+
+- **Split.** Chronological, on UTC midnights: train, then validation, then test, 70 / 15 / 15 of the
+  usable span by default (`--val-start` / `--test-start` pin the dates). A sample belongs to a split
+  only if all 64 of its target bars do, and each split ends `embargo_bars` (one day) before the next
+  begins, so no target is shared or adjacent across splits. Train drives the gradient steps,
+  validation picks the checkpoint and stops early, test is scored once at the end.
+- **Loss.** Pinball loss on the nine deciles over the first `loss_horizon` = 15 steps (one Kalshi
+  window), each step divided by the sample's random-walk scale `sigma_1m * sqrt(k + 1/3)`. The same
+  score is reported for the Gaussian RW+vol baseline; `skill_vs_rw > 0` means the model beats it.
+- **Same path as inference.** Training calls the function `predict` runs, with gradients enabled,
+  and evaluation is always fp32 with sorted quantiles, exactly what the backtest sees.
+- **Outputs** in `data/finetune/<run_id>/`: `best/` (lowest validation loss) and `last/` checkpoints,
+  `splits.json`, `train_log.jsonl`, `summary.json`, `summary.txt`. A checkpoint directory is a valid
+  `--model-id`, and the summary prints the two commands that backtest the fine-tuned and the
+  zero-shot model on the held-out test dates. Backtests of a fine-tuned model on train or
+  validation dates are contaminated and mean nothing.
+
+On ROCm 7.2 / torch 2.14 the fp32 backward pass segfaults somewhere above 96 samples per pass at
+context 4096, so keep `micro_batch` at 32 and grow `batch_size` instead (gradients are accumulated).
+
 ## How the backtest is defined
 
 - Windows open at HH:00/15/30/45 UTC. **Settlement** is Kalshi's rule: the mean of the once-per-second
