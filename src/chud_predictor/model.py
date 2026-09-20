@@ -14,6 +14,7 @@ log = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "google/timesfm-3.0-pytorch"
 N_QUANTILES = 9
+OUTPUT_PATCH = 64
 
 
 def pick_device(explicit: str | None = None) -> str:
@@ -47,7 +48,7 @@ class ForecasterHandle:
     device: str
     model_id: str
     batch_size: int
-    obj: Any  # anything with predict_batch(contexts, horizon, return_quantiles=..., ...)
+    obj: Any  # anything with TimesFM3Forecaster.predict_batch's signature
 
 
 def load_forecaster(
@@ -76,32 +77,53 @@ def load_forecaster(
 
 def predict(
     handle: ForecasterHandle,
-    contexts: np.ndarray | list[np.ndarray],
-    horizon: int = 64,
+    targets: np.ndarray | list[np.ndarray],
+    horizon: int = OUTPUT_PATCH,
     *,
-    quantiles: bool = True,
+    past_only: np.ndarray | None = None,
+    past_future: np.ndarray | None = None,
     symmetric: bool = False,
+    clip: tuple[float, float] | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """-> (median (n, horizon), quantiles (n, horizon, 9)) in model space, input order preserved."""
-    ctx_list = [np.asarray(c, dtype=np.float32) for c in contexts]
-    n = len(ctx_list)
+    """Forecast of the target variate: (median (n, horizon), quantiles (n, horizon, 9)), input order
+    preserved.
+
+    targets      (n, C) or a list of (C,) arrays; a leading NaN run is masked by TimesFM
+    past_only    (n, K, C) covariates known up to the origin, or None
+    past_future  (n, W, C + H) covariates known through the horizon, or None, with H the horizon
+                 rounded up to the 64-step output patch. TimesFM re-derives the horizon from this
+                 width, so a wrong width silently shifts the forecast: it is validated here.
+    clip         bounds of the target (e.g. (0, 1) for a price); clipping is monotone, so clipped
+                 quantiles are still quantiles, and they are re-sorted afterwards
+    """
+    tgt_list = [np.asarray(t, dtype=np.float32) for t in targets]
+    n = len(tgt_list)
     if n == 0:
         return np.zeros((0, horizon)), np.zeros((0, horizon, N_QUANTILES))
-    outs = list(
-        handle.obj.predict_batch(
-            ctx_list,
-            horizon=horizon,
-            return_quantiles=True,
-            use_symmetric_averaging=symmetric,
-            make_positive=False,
-        )
-    )
+    width = tgt_list[0].shape[-1]
+    h_model = -(-horizon // OUTPUT_PATCH) * OUTPUT_PATCH
+    kwargs: dict[str, Any] = {}
+    if past_only is not None:
+        if past_only.shape[0] != n or past_only.shape[-1] != width:
+            raise ValueError(f"past_only must be (n, K, {width}), got {past_only.shape}")
+        kwargs["past_only_covariates"] = [np.asarray(p, dtype=np.float32) for p in past_only]
+    if past_future is not None:
+        if past_future.shape[0] != n or past_future.shape[-1] != width + h_model:
+            raise ValueError(f"past_future must be (n, W, {width} + {h_model}), got {past_future.shape}")
+        kwargs["past_future_covariates"] = [np.asarray(p, dtype=np.float32) for p in past_future]
+    outs = list(handle.obj.predict_batch(
+        tgt_list, horizon=h_model if past_future is not None else horizon,
+        return_quantiles=True, use_symmetric_averaging=symmetric, make_positive=False, **kwargs,
+    ))
     if len(outs) != n:
         raise RuntimeError(f"predict_batch returned {len(outs)} outputs for {n} contexts")
-    med = np.stack([np.asarray(o.forecast, dtype=np.float64) for o in outs])
-    q = np.stack([np.asarray(o.quantiles, dtype=np.float64) for o in outs])
+    med = np.stack([np.asarray(o.forecast, dtype=np.float64) for o in outs])[:, :horizon]
+    q = np.stack([np.asarray(o.quantiles, dtype=np.float64) for o in outs])[:, :horizon]
     if q.shape[-1] == N_QUANTILES + 1:  # (mean + 9 quantiles) layout of older checkpoints
         q = q[..., 1:]
     if q.shape != (n, horizon, N_QUANTILES) or med.shape != (n, horizon):
         raise RuntimeError(f"unexpected output shapes median {med.shape}, quantiles {q.shape}")
+    if clip is not None:
+        med = np.clip(med, *clip)
+        q = np.sort(np.clip(q, *clip), axis=-1)
     return med, q

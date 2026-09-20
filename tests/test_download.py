@@ -1,10 +1,11 @@
+import json
 from datetime import date, datetime
 
 import polars as pl
-from conftest import synthetic_ticks
+from conftest import CONTRACT_TABLE, synthetic_candles, synthetic_ticks
 
 from chud_predictor.download import MANIFEST_NAME, Manifest, day_path, download
-from chud_predictor.qdb import QuestDB
+from chud_predictor.qdb import BRTI, CONTRACTS, QuestDB
 
 
 def _seed(fake_qdb, days: int, tail_seconds: int = 86_400):
@@ -71,3 +72,34 @@ def test_date_range_filter(fake_qdb, settings):
     q = QuestDB(settings)
     rep = download(q, settings.raw_dir, start=date(2025, 9, 19), end=date(2025, 9, 19))
     assert rep.fetched == [date(2025, 9, 19)]
+
+
+def test_sub_second_days_verify_like_any_other(fake_qdb, settings):
+    fake_qdb.add_day(date(2026, 6, 1), synthetic_ticks(datetime(2026, 6, 1), 3_600, hz=5))
+    fake_qdb.add_day(date(2026, 6, 2), synthetic_ticks(datetime(2026, 6, 2), 60, hz=5))
+    rep = download(QuestDB(settings), settings.raw_dir)
+    m = Manifest.load(settings.raw_dir / MANIFEST_NAME)
+    assert rep.failed == {} and m.days["2026-06-01"].rows == 18_000 and m.days["2026-06-01"].complete
+
+
+def test_two_sources_have_separate_dirs_and_manifests(fake_qdb, settings):
+    ticks = synthetic_ticks(datetime(2025, 12, 20), 86_400 + 7_200, seed=4)
+    fake_qdb.add_rows(ticks, "index_values_hist")
+    candles = synthetic_candles(ticks, seed=5)
+    fake_qdb.add_rows(candles, CONTRACT_TABLE)
+    q = QuestDB(settings)
+    rb = download(q, settings.raw_dir_for("brti"), BRTI)
+    rc = download(q, settings.raw_dir_for("contracts"), CONTRACTS)
+    assert rb.source == "brti" and rc.source == "contracts" and settings.raw_dir != settings.contracts_raw_dir
+    got = pl.concat([pl.read_parquet(p) for p in sorted(settings.contracts_raw_dir.glob("date=*.parquet"))])
+    assert got.equals(candles.select(got.columns))
+    mc = Manifest.load(settings.contracts_raw_dir / MANIFEST_NAME)
+    assert mc.table == CONTRACT_TABLE and mc.filter_sql == "series_ticker = 'KXBTC15M'"
+    assert download(q, settings.contracts_raw_dir, CONTRACTS).fetched == [date(2025, 12, 21)]   # only the partial tail day
+
+
+def test_old_manifest_format_still_loads(tmp_path):
+    p = tmp_path / MANIFEST_NAME
+    p.write_text(json.dumps({"table": "index_values_hist", "index_id": "BRTI", "days": {}}))
+    m = Manifest.load(p)
+    assert m.filter_sql == "index_id = 'BRTI'" and m.days == {}

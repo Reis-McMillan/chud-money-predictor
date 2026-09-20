@@ -1,7 +1,11 @@
 """Thin QuestDB HTTP client (`/exec` JSON for metadata, `/exp` CSV for bulk rows).
 
-Timestamps are exchanged as epoch microseconds (`cast(ts as long)`) and converted to
-tz-naive UTC `Datetime("us")` on the way in.
+Two source tables, described by a `TableSpec`:
+  * BRTI      index_values_hist       raw index ticks (1 Hz until ~May 2026, 5 Hz after)
+  * CONTRACTS contract_candles_hist   Kalshi KXBTC15M 1-minute candles (ts = END of the minute)
+
+Timestamps are exchanged as epoch microseconds (`cast(ts as long)`) and converted to tz-naive UTC
+`Datetime("us")` on the way in.
 """
 
 from __future__ import annotations
@@ -20,7 +24,34 @@ from .settings import Settings, require_password
 
 log = logging.getLogger(__name__)
 
-TICK_SCHEMA: dict[str, pl.DataType] = {"ts_us": pl.Int64, "value": pl.Float64}
+
+@dataclass(frozen=True)
+class TableSpec:
+    name: str                        # "brti" | "contracts": raw sub-directory and manifest label
+    table: str
+    where: str | None                # row filter, e.g. "index_id = 'BRTI'"
+    columns: tuple[str, ...]         # select list, excluding ts
+    dtypes: tuple[pl.DataType, ...]  # dtype of each column
+
+    @property
+    def schema(self) -> dict[str, pl.DataType]:
+        return {"ts_us": pl.Int64, **dict(zip(self.columns, self.dtypes, strict=True))}
+
+
+BRTI = TableSpec("brti", "index_values_hist", "index_id = 'BRTI'", ("value",), (pl.Float64,))
+
+CONTRACT_NUMERIC = (
+    "floor_strike",
+    "yes_bid_open", "yes_bid_high", "yes_bid_low", "yes_bid_close",
+    "yes_ask_open", "yes_ask_high", "yes_ask_low", "yes_ask_close",
+    "price_open", "price_high", "price_low", "price_close", "price_mean",
+    "volume", "open_interest",
+)
+CONTRACTS = TableSpec(
+    "contracts", "contract_candles_hist", "series_ticker = 'KXBTC15M'",
+    ("ticker", *CONTRACT_NUMERIC), (pl.Utf8, *([pl.Float64] * len(CONTRACT_NUMERIC))),
+)
+SOURCES: dict[str, TableSpec] = {"brti": BRTI, "contracts": CONTRACTS}
 
 
 class QdbError(RuntimeError):
@@ -43,6 +74,11 @@ def _parse_ts(s: str | None) -> datetime | None:
     if s is None:
         return None
     return datetime.strptime(s, "%Y-%m-%dT%H:%M:%S.%fZ")
+
+
+def _where(spec: TableSpec, *extra: str) -> str:
+    parts = [p for p in (spec.where, *extra) if p]
+    return (" WHERE " + " AND ".join(parts)) if parts else ""
 
 
 class QuestDB:
@@ -147,19 +183,16 @@ class QuestDB:
         data = self.exec_json("SELECT table_name FROM tables() ORDER BY table_name")
         return [r[0] for r in data.get("dataset", [])]
 
-    def bounds(self, table: str, index_id: str) -> Bounds:
-        data = self.exec_json(
-            f"SELECT count(), min(ts), max(ts) FROM {table} WHERE index_id = '{index_id}'"
-        )
+    def bounds(self, spec: TableSpec) -> Bounds:
+        data = self.exec_json(f"SELECT count(), min(ts), max(ts) FROM {spec.table}{_where(spec)}")
         rows = data.get("dataset") or [[0, None, None]]
         n, lo, hi = rows[0]
         return Bounds(rows=int(n or 0), min_ts=_parse_ts(lo), max_ts=_parse_ts(hi))
 
-    def day_counts(self, table: str, index_id: str, upto: datetime) -> dict[date, int]:
+    def day_counts(self, spec: TableSpec, upto: datetime) -> dict[date, int]:
         """Rows per UTC day with ts < upto. One query for the whole history (~365 rows)."""
         data = self.exec_json(
-            f"SELECT ts, count() AS n FROM {table} "
-            f"WHERE index_id = '{index_id}' AND ts < {ts_literal(upto)} "
+            f"SELECT ts, count() AS n FROM {spec.table}{_where(spec, f'ts < {ts_literal(upto)}')} "
             "SAMPLE BY 1d ALIGN TO CALENDAR"
         )
         out: dict[date, int] = {}
@@ -167,19 +200,16 @@ class QuestDB:
             out[_parse_ts(ts_s).date()] = int(n)
         return out
 
-    def fetch_day(self, table: str, index_id: str, day: date, upto: datetime) -> pl.DataFrame:
-        """All ticks of one UTC day (bounded by `upto`), columns ts: Datetime[us], value: f64."""
+    def fetch_day(self, spec: TableSpec, day: date, upto: datetime) -> pl.DataFrame:
+        """All rows of one UTC day (bounded by `upto`): ts Datetime[us] + spec.columns, sorted by ts."""
         day_start = datetime(day.year, day.month, day.day)
         day_end = min(day_start + timedelta(days=1), upto)
-        sql = (
-            f"SELECT cast(ts as long) AS ts_us, value FROM {table} "
-            f"WHERE index_id = '{index_id}' AND ts >= {ts_literal(day_start)} "
-            f"AND ts < {ts_literal(day_end)}"
-        )
-        df = self.exp_csv(sql, TICK_SCHEMA)
+        where = _where(spec, f"ts >= {ts_literal(day_start)}", f"ts < {ts_literal(day_end)}")
+        sql = f"SELECT cast(ts as long) AS ts_us, {', '.join(spec.columns)} FROM {spec.table}{where}"
+        df = self.exp_csv(sql, spec.schema)
         return (
             df.with_columns(pl.from_epoch(pl.col("ts_us"), time_unit="us").alias("ts"))
-            .select("ts", "value")
+            .select("ts", *spec.columns)
             .sort("ts")
         )
 

@@ -1,0 +1,14 @@
+# MI300X profile: all downloaded history, every minute of every window.
+[spec]
+context = 1024          # keep equal to the fine-tune context; 2048 is the sensitivity run
+covariates = "full"
+minutes = "0-14"
+
+[run]
+origin_chunk = 256
+batch_size = 64
+device = "auto"
+fan_lookback_days = 30
+bootstrap_days = 1000
+plot = true
+trajectories = 12

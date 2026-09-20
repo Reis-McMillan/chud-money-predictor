@@ -1,0 +1,17 @@
+# Laptop smoke profile: one UTC day on CPU. Needs the two days before it downloaded as well
+# (context + the persistence fan), e.g. `chudp download --start 2026-09-13 --end 2026-09-16`.
+[spec]
+context = 512
+covariates = "full"
+minutes = "0-14"
+
+[run]
+start = "2026-09-16"
+end = "2026-09-16"
+origin_chunk = 32
+batch_size = 4
+device = "cpu"
+fan_lookback_days = 2
+bootstrap_days = 100
+plot = true
+trajectories = 4

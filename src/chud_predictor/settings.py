@@ -30,7 +30,16 @@ class Settings:
 
     @property
     def raw_dir(self) -> Path:
+        """Raw BRTI ticks, one Parquet per UTC day."""
         return self.data_dir / "raw" / "brti"
+
+    @property
+    def contracts_raw_dir(self) -> Path:
+        """Raw Kalshi KXBTC15M 1-minute candles, one Parquet per UTC day."""
+        return self.data_dir / "raw" / "contracts"
+
+    def raw_dir_for(self, source: str) -> Path:
+        return {"brti": self.raw_dir, "contracts": self.contracts_raw_dir}[source]
 
     @property
     def processed_dir(self) -> Path:
@@ -39,10 +48,6 @@ class Settings:
     @property
     def backtests_dir(self) -> Path:
         return self.data_dir / "backtests"
-
-    @property
-    def forecasts_dir(self) -> Path:
-        return self.data_dir / "forecasts"
 
     @property
     def finetune_dir(self) -> Path:
