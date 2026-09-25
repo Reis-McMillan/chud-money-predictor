@@ -40,6 +40,12 @@ def test_shapes_and_presets(world):
     none = CV.build_arrays(CV.frame_arrays(frame, "none"), i, C)
     assert none["po"] is None and none["pf"] is None and np.array_equal(none["targets"], b["targets"])
     assert CV.build_arrays(CV.frame_arrays(frame, "brti_only"), i, C)["po"].shape == (40, 8, C)
+    # the one-second preset: 12 index series where `full` has 8, the fair path rebuilt on the realized-vol sigma
+    fa_rv = CV.frame_arrays(frame, "full_rv")
+    rv = CV.build_arrays(fa_rv, i, C)
+    assert rv["po"].shape == (40, 21, C) and rv["pf"].shape == (40, 7, C + 64) and fa_rv.n_variates == 29
+    assert np.isfinite(rv["po"]).all() and np.isfinite(rv["pf"]).all() and np.array_equal(rv["targets"], b["targets"])
+    assert np.array_equal(fa.sigma, frame["sigma_1m"].to_numpy(), equal_nan=True)           # `full` is untouched
     with pytest.raises(ValueError, match="unknown covariate preset"):
         CV.frame_arrays(frame, "everything")
 
@@ -81,20 +87,29 @@ def test_known_future_covariates_continue_the_clock(world):
     z = np.log(r["brti_close"] / r["strike"]) / (r["sigma_1m"] * np.sqrt(h_eff(k_fut[:11])))
     assert np.allclose(pf["rw_fair_path"][C:C + 11], norm_cdf(np.clip(z, -8, 8)), atol=2e-5)
     assert np.allclose(pf["rw_fair_path"][C + 11:], pf["rw_fair_path"][C + 10], atol=2e-5)
+    # the realized-vol twin is the same construction on sigma_rv / rw_p_rv
+    fa_rv = CV.frame_arrays(frame, "full_rv")
+    pf_rv = dict(zip(fa_rv.pf_names, CV.build_arrays(fa_rv, i, C)["pf"][0], strict=True))
+    assert np.allclose(pf_rv["rw_fair_path_rv"][:C], frame["rw_p_rv"].to_numpy()[i[0] - C + 1: i[0] + 1], atol=2e-5)
+    z_rv = np.log(r["brti_close"] / r["strike"]) / (r["sigma_rv"] * np.sqrt(h_eff(k_fut[:11])))
+    assert np.allclose(pf_rv["rw_fair_path_rv"][C:C + 11], norm_cdf(np.clip(z_rv, -8, 8)), atol=2e-5)
+    assert not np.allclose(pf_rv["rw_fair_path_rv"][C:C + 11], pf["rw_fair_path"][C:C + 11], atol=1e-4)
 
 
 def test_no_lookahead_by_poisoning_the_future(world):
     """Every input array must be identical when all data after the context end is destroyed."""
     frame, fa, ok = world
     data_cols = [c for c in frame.columns if c not in ("ts", "idx", "t0", "k", "date", "hour", "minute_of_day")]
-    for m in (0, 1, 8, 14):
-        i = _pick(ok, CONTRACT_START.replace(hour=11), m)
-        clean = CV.build_arrays(fa, i, C)
-        poisoned = frame.with_columns([pl.when(pl.col("idx") > int(i[0])).then(None).otherwise(pl.col(c)).alias(c) for c in data_cols])
-        got = CV.build_arrays(CV.frame_arrays(poisoned, "full"), i, C)
-        for key in ("targets", "po", "pf", "mask"):
-            assert np.array_equal(clean[key], got[key]), (m, key)
-        assert not got["valid"].any()                     # while the targets really were in the poisoned part
+    for preset in ("full", "full_rv"):
+        fa_p = CV.frame_arrays(frame, preset)
+        for m in (0, 1, 8, 14):
+            i = _pick(ok, CONTRACT_START.replace(hour=11), m)
+            clean = CV.build_arrays(fa_p, i, C)
+            poisoned = frame.with_columns([pl.when(pl.col("idx") > int(i[0])).then(None).otherwise(pl.col(c)).alias(c) for c in data_cols])
+            got = CV.build_arrays(CV.frame_arrays(poisoned, preset), i, C)
+            for key in ("targets", "po", "pf", "mask"):
+                assert np.array_equal(clean[key], got[key]), (preset, m, key)
+            assert not got["valid"].any()                 # while the targets really were in the poisoned part
 
 
 def test_interpolation_mirrors_timesfm():

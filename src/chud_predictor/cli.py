@@ -109,11 +109,11 @@ def resample(freq: str = "1m", force: bool = False) -> None:
 
 
 @app.command()
-def frame(force: bool = False, vol_lookback: int = 240) -> None:
+def frame(force: bool = False, vol_lookback: int = 240, rv_lookback: int = 30) -> None:
     """Join the BRTI bars with the contract candles into the 1-minute model frame and print its audit."""
     from .features import build_frame
 
-    out, meta = build_frame(_settings().processed_dir, _settings().contracts_raw_dir, vol_lookback=vol_lookback, force=force)
+    out, meta = build_frame(_settings().processed_dir, _settings().contracts_raw_dir, vol_lookback=vol_lookback, rv_lookback=rv_lookback, force=force)
     typer.echo(f"{out}: {meta['n_rows']:,} rows {meta['first_ts']} .. {meta['last_ts']}")
     typer.echo(f"  contract candles on {meta['n_rows_with_candle']:,} rows ({meta['contract_first_ts']} .. {meta['contract_last_ts']}); "
                f"{meta['n_windows']:,} windows, {meta['n_complete_windows']:,} with all 15 candles")
@@ -127,7 +127,7 @@ def frame(force: bool = False, vol_lookback: int = 240) -> None:
 def backtest_contract(
     config: Annotated[Path | None, typer.Option("--config", help="TOML with [spec] and [run]; flags override")] = None,
     context: Annotated[int | None, typer.Option(help="context rows (multiple of 32)")] = None,
-    covariates: Annotated[str | None, typer.Option(help="full | no_fair_path | brti_only | quotes_only | calendar_only | none")] = None,
+    covariates: Annotated[str | None, typer.Option(help="full | full_rv | no_fair_path | brti_only | quotes_only | calendar_only | none")] = None,
     minutes: Annotated[str | None, typer.Option(help="origin minutes, '0-14' | '0,5,10,14'")] = None,
     max_ctx_gap_frac: Annotated[float | None, typer.Option()] = None,
     require_quote_ok: Annotated[bool | None, typer.Option("--require-quote-ok/--no-require-quote-ok")] = None,

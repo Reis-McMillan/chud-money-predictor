@@ -60,7 +60,11 @@ realised price and both baselines), `metrics_*.parquet`, `bootstrap.parquet`, `b
 
 **Bars.** Closed-left, labelled by their START. Every statistic is computed on the on-the-second
 ticks only: that is what Kalshi samples and what the older history already is, so the bars do not
-change when the tick density does. `n_raw_ticks` is a diagnostic, never a model input.
+change when the tick density does. `n_raw_ticks` is a diagnostic, never a model input. Three
+statistics look inside the minute: `rv_1s`, the realized variance (sum of squared one-second log
+returns, scaled to a full bar and null with fewer than half the bar's returns, so a sparse minute is
+never a calm one), and `ret_l10` / `ret_l30`, the log return over the bar's last 10 / 30 seconds. A
+return belongs to the bar of its later tick; one across more than a minute or a UTC midnight is dropped.
 
 **One grid, one rule.** Contract candles are re-labelled to `ts − 1m`, so for both sources *the
 row labelled L is fully observable at wall clock L + 1m*. A window opening at T0 owns rows
@@ -85,6 +89,17 @@ day, and the fair-value path "if BRTI stays where it is" (from origin-time infor
 `no_fair_path` preset removes it). Missing values are interpolated as TimesFM would, and any 32-point
 input patch that is exactly flat (a one-cent spread for half an hour) gets a fixed jitter of 1% of a
 price tick, because TimesFM's running statistics divide by a sigma that is 0 for a flat series.
+
+**The one-second preset, `full_rv` (29 variates).** The model stays on the 1-minute grid (the contract
+only has 1-minute candles); what the ticks add is summarised per minute. `sigma_rv` is the per-minute
+sigma from the mean `rv_1s` of the last 30 bars (`chudp frame --rv-lookback`): one-second returns make
+a window that short precise, and a short window follows the vol regime, which the 240-bar `sigma_1m`
+cannot. `full_rv` swaps trailing vol, z and `Φ(z)` for their `sigma_rv` versions and adds the regime
+ratio `log(sigma_rv15 / sigma_rv240)`, the mispricing `Φ(z) − mid`, and the last 10 / 30 seconds'
+index return in sigmas (21 past-only covariates); its fair-value path is built on `sigma_rv` too.
+`full`, the origin set (still gated on `sigma_1m`) and the index-only baseline are unchanged, so the
+two presets are scored on identical rows. `scripts/analysis/signal_check.py` is the small-model
+diagnostic behind this preset (vol forecast quality, gap → next mid change, trade P&L after costs).
 
 **Scoring.** Errors are in cents. The mid is close to a martingale, so absolute error means little;
 read **`skill_mse = 1 − MSE / MSE(persistence)`** and **`skill_pinball = 1 − pinball /
@@ -123,7 +138,8 @@ against the 0/1 outcome, versus the market's own last price). Origins whose quot
 
 Memory scales with tokens per pass, `micro_batch × variates × (context/32 + 2)`. On ROCm 7.2 /
 torch 2.14 the fp32 backward pass segfaulted above roughly 12.5k tokens, so at 25 variates keep
-`micro_batch ≤ 8` at context 1024 (≤ 4 at 2048) and grow `batch_size` instead.
+`micro_batch ≤ 8` at context 1024 (≤ 4 at 2048) and grow `batch_size` instead; the same limits hold
+for the 29 variates of `full_rv` (986 tokens per sample at context 1024).
 
 ## Tests
 

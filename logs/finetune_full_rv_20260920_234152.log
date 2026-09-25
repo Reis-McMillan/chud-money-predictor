@@ -1,0 +1,373 @@
+23:41:53 INFO chudp: config configs/finetune.toml: {'finetune': {'context': 1024, 'covariates': 'full', 'start': '2025-12-15', 'val_frac': 0.15, 'test_frac': 0.15, 'embargo_bars': 1440, 'trainable': 'all', 'precision': 'fp32', 'loss_scale': 'none', 'lr': 1e-05, 'warmup_steps': 100, 'max_steps': 6400, 'batch_size': 32, 'micro_batch': 8, 'eval_every': 400, 'eval_samples': 16384, 'patience': 0, 'device': 'auto'}}
+23:41:53 INFO chudp: resolved config: FinetuneConfig(context=1024, horizon=64, covariates='full_rv', max_ctx_gap_frac=0.01, require_quote_ok=False, start=datetime.date(2025, 12, 15), end=None, val_frac=0.15, test_frac=0.15, val_start=None, test_start=None, embargo_bars=1440, model_id='google/timesfm-3.0-pytorch', device=None, precision='fp32', trainable='all', loss_scale='none', lr=1e-05, min_lr_frac=0.1, weight_decay=0.01, warmup_steps=100, max_steps=6400, batch_size=32, micro_batch=8, grad_clip=1.0, eval_every=400, eval_samples=16384, eval_batch=32, patience=0, log_every=20, seed=0, run_id=None)
+23:41:55 INFO chud_predictor.finetune: train targets in [2025-12-19 06:57:00, 2026-06-27 00:00:00): 203750 origins
+23:41:55 INFO chud_predictor.finetune: val   targets in [2026-06-28 00:00:00, 2026-08-06 00:00:00): 46580 origins
+23:41:55 INFO chud_predictor.finetune: test  targets in [2026-08-07 00:00:00, 2026-09-17 02:00:00): 45708 origins
+23:41:55 INFO chud_predictor.model: loading google/timesfm-3.0-pytorch on cuda (AMD Instinct MI300X VF, torch 2.14.0+rocm7.2) (batch 32)
+23:41:56 INFO chud_predictor.finetune: trainable parameters: 330.7M of 330.7M (all); 29 variates
+23:47:54 INFO chud_predictor.finetune: zero-shot val : pinball_c=9.9209  pinball_c_fan=7.5502  skill_pinball=-0.3140  rmse_c=32.4183  skill_mse=-0.2047  skill_mae=0.0017  cover80=0.2905  settle_bss_persist=-0.4930
+23:47:54 INFO chud_predictor.finetune: zero-shot test: pinball_c=9.6206  pinball_c_fan=7.3704  skill_pinball=-0.3053  rmse_c=31.5657  skill_mse=-0.2117  skill_mae=-0.0175  cover80=0.2957  settle_bss_persist=-0.4601
+23:48:27 INFO chud_predictor.finetune: step 20/6400  train_loss=0.10223  grad_norm=0.133  lr=2.00e-06  epoch=1  19.9 origins/s
+23:48:55 INFO chud_predictor.finetune: step 40/6400  train_loss=0.09494  grad_norm=0.200  lr=4.00e-06  epoch=1  21.0 origins/s
+23:49:24 INFO chud_predictor.finetune: step 60/6400  train_loss=0.09574  grad_norm=0.112  lr=6.00e-06  epoch=1  21.4 origins/s
+23:49:53 INFO chud_predictor.finetune: step 80/6400  train_loss=0.08255  grad_norm=0.066  lr=8.00e-06  epoch=1  21.6 origins/s
+23:50:22 WARNING chud_predictor.finetune: step 100: non-finite gradient, update skipped (1 so far)
+23:50:22 INFO chud_predictor.finetune: step 100/6400  train_loss=0.08300  grad_norm=nan  lr=1.00e-05  epoch=1  21.7 origins/s
+23:50:51 INFO chud_predictor.finetune: step 120/6400  train_loss=0.07902  grad_norm=0.072  lr=1.00e-05  epoch=1  21.8 origins/s
+23:51:19 INFO chud_predictor.finetune: step 140/6400  train_loss=0.08367  grad_norm=0.080  lr=1.00e-05  epoch=1  21.9 origins/s
+23:51:48 INFO chud_predictor.finetune: step 160/6400  train_loss=0.07723  grad_norm=0.065  lr=1.00e-05  epoch=1  21.9 origins/s
+23:52:17 INFO chud_predictor.finetune: step 180/6400  train_loss=0.07741  grad_norm=0.098  lr=1.00e-05  epoch=1  22.0 origins/s
+23:52:46 INFO chud_predictor.finetune: step 200/6400  train_loss=0.07866  grad_norm=0.069  lr=9.99e-06  epoch=1  22.0 origins/s
+23:53:14 INFO chud_predictor.finetune: step 220/6400  train_loss=0.07693  grad_norm=0.070  lr=9.99e-06  epoch=1  22.0 origins/s
+23:53:43 INFO chud_predictor.finetune: step 240/6400  train_loss=0.07815  grad_norm=0.067  lr=9.99e-06  epoch=1  22.0 origins/s
+23:54:12 INFO chud_predictor.finetune: step 260/6400  train_loss=0.07582  grad_norm=0.070  lr=9.99e-06  epoch=1  22.0 origins/s
+23:54:41 INFO chud_predictor.finetune: step 280/6400  train_loss=0.07618  grad_norm=0.093  lr=9.98e-06  epoch=1  22.1 origins/s
+23:55:09 INFO chud_predictor.finetune: step 300/6400  train_loss=0.07150  grad_norm=0.056  lr=9.98e-06  epoch=1  22.1 origins/s
+23:55:38 INFO chud_predictor.finetune: step 320/6400  train_loss=0.07992  grad_norm=0.102  lr=9.97e-06  epoch=1  22.1 origins/s
+23:56:07 INFO chud_predictor.finetune: step 340/6400  train_loss=0.07637  grad_norm=0.068  lr=9.97e-06  epoch=1  22.1 origins/s
+23:56:36 INFO chud_predictor.finetune: step 360/6400  train_loss=0.07541  grad_norm=0.087  lr=9.96e-06  epoch=1  22.1 origins/s
+23:57:05 INFO chud_predictor.finetune: step 380/6400  train_loss=0.07798  grad_norm=0.071  lr=9.96e-06  epoch=1  22.1 origins/s
+23:57:33 INFO chud_predictor.finetune: step 400/6400  train_loss=0.07587  grad_norm=0.060  lr=9.95e-06  epoch=1  22.1 origins/s
+00:00:30 INFO chud_predictor.finetune: step 400 val: pinball_c=7.7652  pinball_c_fan=7.5502  skill_pinball=-0.0285  rmse_c=29.9031  skill_mse=-0.0250  skill_mae=0.0011  cover80=0.8056  settle_bss_persist=-0.0645  *best*
+00:00:59 INFO chud_predictor.finetune: step 420/6400  train_loss=0.07588  grad_norm=0.056  lr=9.94e-06  epoch=1  17.1 origins/s
+00:01:28 INFO chud_predictor.finetune: step 440/6400  train_loss=0.07469  grad_norm=0.071  lr=9.94e-06  epoch=1  17.3 origins/s
+00:01:57 INFO chud_predictor.finetune: step 460/6400  train_loss=0.07898  grad_norm=0.075  lr=9.93e-06  epoch=1  17.5 origins/s
+00:02:26 INFO chud_predictor.finetune: step 480/6400  train_loss=0.07568  grad_norm=0.070  lr=9.92e-06  epoch=1  17.6 origins/s
+00:02:55 INFO chud_predictor.finetune: step 500/6400  train_loss=0.07889  grad_norm=0.070  lr=9.91e-06  epoch=1  17.8 origins/s
+00:03:23 INFO chud_predictor.finetune: step 520/6400  train_loss=0.07637  grad_norm=0.046  lr=9.90e-06  epoch=1  17.9 origins/s
+00:03:52 INFO chud_predictor.finetune: step 540/6400  train_loss=0.07788  grad_norm=0.072  lr=9.89e-06  epoch=1  18.0 origins/s
+00:04:21 INFO chud_predictor.finetune: step 560/6400  train_loss=0.07432  grad_norm=0.064  lr=9.88e-06  epoch=1  18.2 origins/s
+00:04:50 INFO chud_predictor.finetune: step 580/6400  train_loss=0.07431  grad_norm=0.066  lr=9.87e-06  epoch=1  18.3 origins/s
+00:05:19 INFO chud_predictor.finetune: step 600/6400  train_loss=0.07597  grad_norm=0.060  lr=9.86e-06  epoch=1  18.4 origins/s
+00:05:48 INFO chud_predictor.finetune: step 620/6400  train_loss=0.07351  grad_norm=0.065  lr=9.85e-06  epoch=1  18.5 origins/s
+00:06:16 INFO chud_predictor.finetune: step 640/6400  train_loss=0.07739  grad_norm=0.068  lr=9.84e-06  epoch=1  18.6 origins/s
+00:06:45 INFO chud_predictor.finetune: step 660/6400  train_loss=0.07507  grad_norm=0.060  lr=9.83e-06  epoch=1  18.7 origins/s
+00:07:14 INFO chud_predictor.finetune: step 680/6400  train_loss=0.07963  grad_norm=0.079  lr=9.81e-06  epoch=1  18.8 origins/s
+00:07:43 INFO chud_predictor.finetune: step 700/6400  train_loss=0.07789  grad_norm=0.058  lr=9.80e-06  epoch=1  18.8 origins/s
+00:08:12 INFO chud_predictor.finetune: step 720/6400  train_loss=0.07386  grad_norm=0.100  lr=9.79e-06  epoch=1  18.9 origins/s
+00:08:41 INFO chud_predictor.finetune: step 740/6400  train_loss=0.07235  grad_norm=0.105  lr=9.77e-06  epoch=1  19.0 origins/s
+00:09:10 INFO chud_predictor.finetune: step 760/6400  train_loss=0.07462  grad_norm=0.072  lr=9.76e-06  epoch=1  19.1 origins/s
+00:09:39 INFO chud_predictor.finetune: step 780/6400  train_loss=0.07706  grad_norm=0.066  lr=9.74e-06  epoch=1  19.1 origins/s
+00:10:07 INFO chud_predictor.finetune: step 800/6400  train_loss=0.07810  grad_norm=0.075  lr=9.73e-06  epoch=1  19.2 origins/s
+00:13:04 INFO chud_predictor.finetune: step 800 val: pinball_c=7.6756  pinball_c_fan=7.5502  skill_pinball=-0.0166  rmse_c=29.7803  skill_mse=-0.0166  skill_mae=0.0046  cover80=0.7620  settle_bss_persist=-0.0414  *best*
+00:13:34 INFO chud_predictor.finetune: step 820/6400  train_loss=0.07362  grad_norm=0.070  lr=9.71e-06  epoch=1  17.0 origins/s
+00:14:03 INFO chud_predictor.finetune: step 840/6400  train_loss=0.07449  grad_norm=0.061  lr=9.70e-06  epoch=1  17.1 origins/s
+00:14:32 INFO chud_predictor.finetune: step 860/6400  train_loss=0.07285  grad_norm=0.068  lr=9.68e-06  epoch=1  17.2 origins/s
+00:15:01 INFO chud_predictor.finetune: step 880/6400  train_loss=0.07313  grad_norm=0.084  lr=9.66e-06  epoch=1  17.3 origins/s
+00:15:29 INFO chud_predictor.finetune: step 900/6400  train_loss=0.07142  grad_norm=0.058  lr=9.65e-06  epoch=1  17.4 origins/s
+00:15:58 INFO chud_predictor.finetune: step 920/6400  train_loss=0.07535  grad_norm=0.073  lr=9.63e-06  epoch=1  17.5 origins/s
+00:16:27 INFO chud_predictor.finetune: step 940/6400  train_loss=0.07274  grad_norm=0.060  lr=9.61e-06  epoch=1  17.6 origins/s
+00:16:56 INFO chud_predictor.finetune: step 960/6400  train_loss=0.07853  grad_norm=0.083  lr=9.59e-06  epoch=1  17.6 origins/s
+00:17:25 INFO chud_predictor.finetune: step 980/6400  train_loss=0.07354  grad_norm=0.078  lr=9.57e-06  epoch=1  17.7 origins/s
+00:17:54 INFO chud_predictor.finetune: step 1000/6400  train_loss=0.07582  grad_norm=0.064  lr=9.55e-06  epoch=1  17.8 origins/s
+00:18:23 INFO chud_predictor.finetune: step 1020/6400  train_loss=0.07829  grad_norm=0.057  lr=9.53e-06  epoch=1  17.9 origins/s
+00:18:51 INFO chud_predictor.finetune: step 1040/6400  train_loss=0.07574  grad_norm=0.061  lr=9.51e-06  epoch=1  17.9 origins/s
+00:19:20 INFO chud_predictor.finetune: step 1060/6400  train_loss=0.07138  grad_norm=0.057  lr=9.49e-06  epoch=1  18.0 origins/s
+00:19:49 INFO chud_predictor.finetune: step 1080/6400  train_loss=0.07638  grad_norm=0.075  lr=9.47e-06  epoch=1  18.1 origins/s
+00:20:18 INFO chud_predictor.finetune: step 1100/6400  train_loss=0.07279  grad_norm=0.069  lr=9.45e-06  epoch=1  18.1 origins/s
+00:20:47 INFO chud_predictor.finetune: step 1120/6400  train_loss=0.07289  grad_norm=0.095  lr=9.43e-06  epoch=1  18.2 origins/s
+00:21:16 INFO chud_predictor.finetune: step 1140/6400  train_loss=0.07340  grad_norm=0.072  lr=9.41e-06  epoch=1  18.2 origins/s
+00:21:44 INFO chud_predictor.finetune: step 1160/6400  train_loss=0.07888  grad_norm=0.073  lr=9.39e-06  epoch=1  18.3 origins/s
+00:22:13 INFO chud_predictor.finetune: step 1180/6400  train_loss=0.07456  grad_norm=0.056  lr=9.36e-06  epoch=1  18.3 origins/s
+00:22:42 INFO chud_predictor.finetune: step 1200/6400  train_loss=0.07446  grad_norm=0.076  lr=9.34e-06  epoch=1  18.4 origins/s
+00:25:38 INFO chud_predictor.finetune: step 1200 val: pinball_c=7.6084  pinball_c_fan=7.5502  skill_pinball=-0.0077  rmse_c=29.6556  skill_mse=-0.0081  skill_mae=0.0054  cover80=0.8131  settle_bss_persist=-0.0221  *best*
+00:26:08 INFO chud_predictor.finetune: step 1220/6400  train_loss=0.07657  grad_norm=0.072  lr=9.32e-06  epoch=1  17.0 origins/s
+00:26:37 INFO chud_predictor.finetune: step 1240/6400  train_loss=0.07289  grad_norm=0.104  lr=9.29e-06  epoch=1  17.1 origins/s
+00:27:06 INFO chud_predictor.finetune: step 1260/6400  train_loss=0.07327  grad_norm=0.080  lr=9.27e-06  epoch=1  17.1 origins/s
+00:27:35 INFO chud_predictor.finetune: step 1280/6400  train_loss=0.07717  grad_norm=0.060  lr=9.24e-06  epoch=1  17.2 origins/s
+00:28:04 INFO chud_predictor.finetune: step 1300/6400  train_loss=0.07514  grad_norm=0.064  lr=9.22e-06  epoch=1  17.3 origins/s
+00:28:32 INFO chud_predictor.finetune: step 1320/6400  train_loss=0.07670  grad_norm=0.059  lr=9.19e-06  epoch=1  17.3 origins/s
+00:29:01 INFO chud_predictor.finetune: step 1340/6400  train_loss=0.06982  grad_norm=0.084  lr=9.17e-06  epoch=1  17.4 origins/s
+00:29:30 INFO chud_predictor.finetune: step 1360/6400  train_loss=0.07462  grad_norm=0.055  lr=9.14e-06  epoch=1  17.4 origins/s
+00:29:59 INFO chud_predictor.finetune: step 1380/6400  train_loss=0.07284  grad_norm=0.059  lr=9.11e-06  epoch=1  17.5 origins/s
+00:30:28 INFO chud_predictor.finetune: step 1400/6400  train_loss=0.07732  grad_norm=0.073  lr=9.09e-06  epoch=1  17.5 origins/s
+00:30:57 INFO chud_predictor.finetune: step 1420/6400  train_loss=0.07173  grad_norm=0.073  lr=9.06e-06  epoch=1  17.6 origins/s
+00:31:25 INFO chud_predictor.finetune: step 1440/6400  train_loss=0.07718  grad_norm=0.077  lr=9.03e-06  epoch=1  17.6 origins/s
+00:31:54 INFO chud_predictor.finetune: step 1460/6400  train_loss=0.07817  grad_norm=0.098  lr=9.00e-06  epoch=1  17.7 origins/s
+00:32:23 INFO chud_predictor.finetune: step 1480/6400  train_loss=0.07759  grad_norm=0.086  lr=8.98e-06  epoch=1  17.7 origins/s
+00:32:52 INFO chud_predictor.finetune: step 1500/6400  train_loss=0.07331  grad_norm=0.071  lr=8.95e-06  epoch=1  17.8 origins/s
+00:33:21 INFO chud_predictor.finetune: step 1520/6400  train_loss=0.07342  grad_norm=0.070  lr=8.92e-06  epoch=1  17.8 origins/s
+00:33:49 INFO chud_predictor.finetune: step 1540/6400  train_loss=0.06920  grad_norm=0.069  lr=8.89e-06  epoch=1  17.9 origins/s
+00:34:18 INFO chud_predictor.finetune: step 1560/6400  train_loss=0.07628  grad_norm=0.092  lr=8.86e-06  epoch=1  17.9 origins/s
+00:34:47 INFO chud_predictor.finetune: step 1580/6400  train_loss=0.07711  grad_norm=0.050  lr=8.83e-06  epoch=1  18.0 origins/s
+00:35:16 INFO chud_predictor.finetune: step 1600/6400  train_loss=0.07206  grad_norm=0.050  lr=8.80e-06  epoch=1  18.0 origins/s
+00:38:12 INFO chud_predictor.finetune: step 1600 val: pinball_c=7.5996  pinball_c_fan=7.5502  skill_pinball=-0.0065  rmse_c=29.6639  skill_mse=-0.0087  skill_mae=0.0050  cover80=0.7989  settle_bss_persist=-0.0185  *best*
+00:38:42 INFO chud_predictor.finetune: step 1620/6400  train_loss=0.07343  grad_norm=0.067  lr=8.77e-06  epoch=1  17.0 origins/s
+00:39:11 INFO chud_predictor.finetune: step 1640/6400  train_loss=0.07470  grad_norm=0.095  lr=8.74e-06  epoch=1  17.1 origins/s
+00:39:40 INFO chud_predictor.finetune: step 1660/6400  train_loss=0.07361  grad_norm=0.093  lr=8.71e-06  epoch=1  17.1 origins/s
+00:40:09 INFO chud_predictor.finetune: step 1680/6400  train_loss=0.07377  grad_norm=0.074  lr=8.67e-06  epoch=1  17.2 origins/s
+00:40:37 INFO chud_predictor.finetune: step 1700/6400  train_loss=0.07543  grad_norm=0.088  lr=8.64e-06  epoch=1  17.2 origins/s
+00:41:06 INFO chud_predictor.finetune: step 1720/6400  train_loss=0.07411  grad_norm=0.052  lr=8.61e-06  epoch=1  17.2 origins/s
+00:41:35 INFO chud_predictor.finetune: step 1740/6400  train_loss=0.07504  grad_norm=0.069  lr=8.58e-06  epoch=1  17.3 origins/s
+00:42:04 INFO chud_predictor.finetune: step 1760/6400  train_loss=0.07594  grad_norm=0.082  lr=8.54e-06  epoch=1  17.3 origins/s
+00:42:33 INFO chud_predictor.finetune: step 1780/6400  train_loss=0.07053  grad_norm=0.083  lr=8.51e-06  epoch=1  17.4 origins/s
+00:43:01 INFO chud_predictor.finetune: step 1800/6400  train_loss=0.07102  grad_norm=0.059  lr=8.48e-06  epoch=1  17.4 origins/s
+00:43:30 INFO chud_predictor.finetune: step 1820/6400  train_loss=0.07461  grad_norm=0.065  lr=8.44e-06  epoch=1  17.5 origins/s
+00:43:59 INFO chud_predictor.finetune: step 1840/6400  train_loss=0.07439  grad_norm=0.065  lr=8.41e-06  epoch=1  17.5 origins/s
+00:44:28 INFO chud_predictor.finetune: step 1860/6400  train_loss=0.07206  grad_norm=0.054  lr=8.38e-06  epoch=1  17.5 origins/s
+00:44:57 INFO chud_predictor.finetune: step 1880/6400  train_loss=0.07388  grad_norm=0.077  lr=8.34e-06  epoch=1  17.6 origins/s
+00:45:25 INFO chud_predictor.finetune: step 1900/6400  train_loss=0.07317  grad_norm=0.062  lr=8.31e-06  epoch=1  17.6 origins/s
+00:45:54 INFO chud_predictor.finetune: step 1920/6400  train_loss=0.07522  grad_norm=0.055  lr=8.27e-06  epoch=1  17.7 origins/s
+00:46:23 INFO chud_predictor.finetune: step 1940/6400  train_loss=0.07330  grad_norm=0.070  lr=8.23e-06  epoch=1  17.7 origins/s
+00:46:52 INFO chud_predictor.finetune: step 1960/6400  train_loss=0.07486  grad_norm=0.066  lr=8.20e-06  epoch=1  17.7 origins/s
+00:47:21 INFO chud_predictor.finetune: step 1980/6400  train_loss=0.07246  grad_norm=0.093  lr=8.16e-06  epoch=1  17.8 origins/s
+00:47:50 INFO chud_predictor.finetune: step 2000/6400  train_loss=0.07302  grad_norm=0.042  lr=8.13e-06  epoch=1  17.8 origins/s
+00:50:46 INFO chud_predictor.finetune: step 2000 val: pinball_c=7.5689  pinball_c_fan=7.5502  skill_pinball=-0.0025  rmse_c=29.5889  skill_mse=-0.0036  skill_mae=0.0062  cover80=0.8234  settle_bss_persist=-0.0132  *best*
+00:51:16 INFO chud_predictor.finetune: step 2020/6400  train_loss=0.07394  grad_norm=0.063  lr=8.09e-06  epoch=1  17.0 origins/s
+00:51:45 INFO chud_predictor.finetune: step 2040/6400  train_loss=0.07580  grad_norm=0.067  lr=8.05e-06  epoch=1  17.0 origins/s
+00:52:14 INFO chud_predictor.finetune: step 2060/6400  train_loss=0.07615  grad_norm=0.062  lr=8.02e-06  epoch=1  17.1 origins/s
+00:52:42 INFO chud_predictor.finetune: step 2080/6400  train_loss=0.07216  grad_norm=0.072  lr=7.98e-06  epoch=1  17.1 origins/s
+00:53:11 INFO chud_predictor.finetune: step 2100/6400  train_loss=0.07715  grad_norm=0.083  lr=7.94e-06  epoch=1  17.2 origins/s
+00:53:40 INFO chud_predictor.finetune: step 2120/6400  train_loss=0.07176  grad_norm=0.118  lr=7.90e-06  epoch=1  17.2 origins/s
+00:54:09 INFO chud_predictor.finetune: step 2140/6400  train_loss=0.07255  grad_norm=0.071  lr=7.87e-06  epoch=1  17.2 origins/s
+00:54:38 INFO chud_predictor.finetune: step 2160/6400  train_loss=0.07518  grad_norm=0.066  lr=7.83e-06  epoch=1  17.3 origins/s
+00:55:06 INFO chud_predictor.finetune: step 2180/6400  train_loss=0.07224  grad_norm=0.056  lr=7.79e-06  epoch=1  17.3 origins/s
+00:55:35 INFO chud_predictor.finetune: step 2200/6400  train_loss=0.07352  grad_norm=0.059  lr=7.75e-06  epoch=1  17.3 origins/s
+00:56:04 INFO chud_predictor.finetune: step 2220/6400  train_loss=0.07321  grad_norm=0.060  lr=7.71e-06  epoch=1  17.4 origins/s
+00:56:33 INFO chud_predictor.finetune: step 2240/6400  train_loss=0.07451  grad_norm=0.072  lr=7.67e-06  epoch=1  17.4 origins/s
+00:57:01 INFO chud_predictor.finetune: step 2260/6400  train_loss=0.07802  grad_norm=0.076  lr=7.63e-06  epoch=1  17.4 origins/s
+00:57:30 INFO chud_predictor.finetune: step 2280/6400  train_loss=0.07848  grad_norm=0.063  lr=7.59e-06  epoch=1  17.5 origins/s
+00:57:59 INFO chud_predictor.finetune: step 2300/6400  train_loss=0.07572  grad_norm=0.062  lr=7.55e-06  epoch=1  17.5 origins/s
+00:58:28 INFO chud_predictor.finetune: step 2320/6400  train_loss=0.07390  grad_norm=0.063  lr=7.51e-06  epoch=1  17.5 origins/s
+00:58:57 INFO chud_predictor.finetune: step 2340/6400  train_loss=0.07817  grad_norm=0.070  lr=7.47e-06  epoch=1  17.6 origins/s
+00:59:25 INFO chud_predictor.finetune: step 2360/6400  train_loss=0.07905  grad_norm=0.077  lr=7.43e-06  epoch=1  17.6 origins/s
+00:59:54 INFO chud_predictor.finetune: step 2380/6400  train_loss=0.07511  grad_norm=0.069  lr=7.39e-06  epoch=1  17.6 origins/s
+01:00:23 INFO chud_predictor.finetune: step 2400/6400  train_loss=0.07341  grad_norm=0.095  lr=7.35e-06  epoch=1  17.7 origins/s
+01:03:19 INFO chud_predictor.finetune: step 2400 val: pinball_c=7.5520  pinball_c_fan=7.5502  skill_pinball=-0.0002  rmse_c=29.6008  skill_mse=-0.0044  skill_mae=0.0069  cover80=0.8265  settle_bss_persist=-0.0128  *best*
+01:03:49 INFO chud_predictor.finetune: step 2420/6400  train_loss=0.07443  grad_norm=0.089  lr=7.31e-06  epoch=1  17.0 origins/s
+01:04:18 INFO chud_predictor.finetune: step 2440/6400  train_loss=0.07415  grad_norm=0.062  lr=7.27e-06  epoch=1  17.0 origins/s
+01:04:47 INFO chud_predictor.finetune: step 2460/6400  train_loss=0.07579  grad_norm=0.071  lr=7.23e-06  epoch=1  17.1 origins/s
+01:05:16 INFO chud_predictor.finetune: step 2480/6400  train_loss=0.07315  grad_norm=0.067  lr=7.19e-06  epoch=1  17.1 origins/s
+01:05:45 INFO chud_predictor.finetune: step 2500/6400  train_loss=0.07317  grad_norm=0.059  lr=7.14e-06  epoch=1  17.1 origins/s
+01:06:14 INFO chud_predictor.finetune: step 2520/6400  train_loss=0.07667  grad_norm=0.086  lr=7.10e-06  epoch=1  17.2 origins/s
+01:06:42 INFO chud_predictor.finetune: step 2540/6400  train_loss=0.07289  grad_norm=0.078  lr=7.06e-06  epoch=1  17.2 origins/s
+01:07:11 INFO chud_predictor.finetune: step 2560/6400  train_loss=0.07348  grad_norm=0.065  lr=7.02e-06  epoch=1  17.2 origins/s
+01:07:40 INFO chud_predictor.finetune: step 2580/6400  train_loss=0.07425  grad_norm=0.072  lr=6.98e-06  epoch=1  17.3 origins/s
+01:08:09 INFO chud_predictor.finetune: step 2600/6400  train_loss=0.07569  grad_norm=0.062  lr=6.93e-06  epoch=1  17.3 origins/s
+01:08:38 INFO chud_predictor.finetune: step 2620/6400  train_loss=0.07506  grad_norm=0.061  lr=6.89e-06  epoch=1  17.3 origins/s
+01:09:06 INFO chud_predictor.finetune: step 2640/6400  train_loss=0.07436  grad_norm=0.074  lr=6.85e-06  epoch=1  17.3 origins/s
+01:09:35 INFO chud_predictor.finetune: step 2660/6400  train_loss=0.07463  grad_norm=0.059  lr=6.80e-06  epoch=1  17.4 origins/s
+01:10:04 INFO chud_predictor.finetune: step 2680/6400  train_loss=0.07571  grad_norm=0.054  lr=6.76e-06  epoch=1  17.4 origins/s
+01:10:33 INFO chud_predictor.finetune: step 2700/6400  train_loss=0.07160  grad_norm=0.061  lr=6.72e-06  epoch=1  17.4 origins/s
+01:11:01 INFO chud_predictor.finetune: step 2720/6400  train_loss=0.07510  grad_norm=0.076  lr=6.68e-06  epoch=1  17.5 origins/s
+01:11:30 INFO chud_predictor.finetune: step 2740/6400  train_loss=0.07431  grad_norm=0.085  lr=6.63e-06  epoch=1  17.5 origins/s
+01:11:59 INFO chud_predictor.finetune: step 2760/6400  train_loss=0.07427  grad_norm=0.077  lr=6.59e-06  epoch=1  17.5 origins/s
+01:12:28 INFO chud_predictor.finetune: step 2780/6400  train_loss=0.07105  grad_norm=0.060  lr=6.55e-06  epoch=1  17.5 origins/s
+01:12:57 INFO chud_predictor.finetune: step 2800/6400  train_loss=0.07514  grad_norm=0.071  lr=6.50e-06  epoch=1  17.6 origins/s
+01:15:53 INFO chud_predictor.finetune: step 2800 val: pinball_c=7.5517  pinball_c_fan=7.5502  skill_pinball=-0.0002  rmse_c=29.5906  skill_mse=-0.0037  skill_mae=0.0080  cover80=0.8071  settle_bss_persist=-0.0124  *best*
+01:16:23 INFO chud_predictor.finetune: step 2820/6400  train_loss=0.07343  grad_norm=0.082  lr=6.46e-06  epoch=1  17.0 origins/s
+01:16:52 INFO chud_predictor.finetune: step 2840/6400  train_loss=0.07266  grad_norm=0.077  lr=6.41e-06  epoch=1  17.0 origins/s
+01:17:21 INFO chud_predictor.finetune: step 2860/6400  train_loss=0.07197  grad_norm=0.071  lr=6.37e-06  epoch=1  17.1 origins/s
+01:17:49 INFO chud_predictor.finetune: step 2880/6400  train_loss=0.07765  grad_norm=0.080  lr=6.33e-06  epoch=1  17.1 origins/s
+01:18:18 INFO chud_predictor.finetune: step 2900/6400  train_loss=0.07493  grad_norm=0.062  lr=6.28e-06  epoch=1  17.1 origins/s
+01:18:47 INFO chud_predictor.finetune: step 2920/6400  train_loss=0.07566  grad_norm=0.084  lr=6.24e-06  epoch=1  17.1 origins/s
+01:19:16 INFO chud_predictor.finetune: step 2940/6400  train_loss=0.07216  grad_norm=0.061  lr=6.19e-06  epoch=1  17.2 origins/s
+01:19:45 INFO chud_predictor.finetune: step 2960/6400  train_loss=0.07566  grad_norm=0.081  lr=6.15e-06  epoch=1  17.2 origins/s
+01:20:13 INFO chud_predictor.finetune: step 2980/6400  train_loss=0.07465  grad_norm=0.067  lr=6.10e-06  epoch=1  17.2 origins/s
+01:20:42 INFO chud_predictor.finetune: step 3000/6400  train_loss=0.07562  grad_norm=0.056  lr=6.06e-06  epoch=1  17.2 origins/s
+01:21:11 INFO chud_predictor.finetune: step 3020/6400  train_loss=0.07509  grad_norm=0.094  lr=6.01e-06  epoch=1  17.3 origins/s
+01:21:40 INFO chud_predictor.finetune: step 3040/6400  train_loss=0.07992  grad_norm=0.087  lr=5.97e-06  epoch=1  17.3 origins/s
+01:22:09 INFO chud_predictor.finetune: step 3060/6400  train_loss=0.07108  grad_norm=0.081  lr=5.93e-06  epoch=1  17.3 origins/s
+01:22:37 INFO chud_predictor.finetune: step 3080/6400  train_loss=0.07414  grad_norm=0.071  lr=5.88e-06  epoch=1  17.3 origins/s
+01:23:06 INFO chud_predictor.finetune: step 3100/6400  train_loss=0.07376  grad_norm=0.069  lr=5.84e-06  epoch=1  17.4 origins/s
+01:23:35 INFO chud_predictor.finetune: step 3120/6400  train_loss=0.07531  grad_norm=0.059  lr=5.79e-06  epoch=1  17.4 origins/s
+01:24:04 INFO chud_predictor.finetune: step 3140/6400  train_loss=0.07363  grad_norm=0.066  lr=5.75e-06  epoch=1  17.4 origins/s
+01:24:33 INFO chud_predictor.finetune: step 3160/6400  train_loss=0.07348  grad_norm=0.077  lr=5.70e-06  epoch=1  17.4 origins/s
+01:25:01 INFO chud_predictor.finetune: step 3180/6400  train_loss=0.07201  grad_norm=0.062  lr=5.66e-06  epoch=1  17.5 origins/s
+01:25:30 INFO chud_predictor.finetune: step 3200/6400  train_loss=0.07598  grad_norm=0.067  lr=5.61e-06  epoch=1  17.5 origins/s
+01:28:26 INFO chud_predictor.finetune: step 3200 val: pinball_c=7.5432  pinball_c_fan=7.5502  skill_pinball=0.0009  rmse_c=29.5592  skill_mse=-0.0016  skill_mae=0.0066  cover80=0.8334  settle_bss_persist=-0.0084  *best*
+01:28:56 INFO chud_predictor.finetune: step 3220/6400  train_loss=0.07820  grad_norm=0.074  lr=5.57e-06  epoch=1  17.0 origins/s
+01:29:25 INFO chud_predictor.finetune: step 3240/6400  train_loss=0.07656  grad_norm=0.082  lr=5.52e-06  epoch=1  17.0 origins/s
+01:29:54 INFO chud_predictor.finetune: step 3260/6400  train_loss=0.07264  grad_norm=0.079  lr=5.48e-06  epoch=1  17.0 origins/s
+01:30:23 INFO chud_predictor.finetune: step 3280/6400  train_loss=0.07284  grad_norm=0.072  lr=5.43e-06  epoch=1  17.1 origins/s
+01:30:52 INFO chud_predictor.finetune: step 3300/6400  train_loss=0.07378  grad_norm=0.090  lr=5.39e-06  epoch=1  17.1 origins/s
+01:31:22 INFO chud_predictor.finetune: step 3320/6400  train_loss=0.07639  grad_norm=0.062  lr=5.34e-06  epoch=1  17.1 origins/s
+01:31:51 INFO chud_predictor.finetune: step 3340/6400  train_loss=0.07347  grad_norm=0.105  lr=5.30e-06  epoch=1  17.1 origins/s
+01:32:20 INFO chud_predictor.finetune: step 3360/6400  train_loss=0.07740  grad_norm=0.069  lr=5.25e-06  epoch=1  17.2 origins/s
+01:32:48 INFO chud_predictor.finetune: step 3380/6400  train_loss=0.07065  grad_norm=0.078  lr=5.21e-06  epoch=1  17.2 origins/s
+01:33:17 INFO chud_predictor.finetune: step 3400/6400  train_loss=0.07670  grad_norm=0.059  lr=5.16e-06  epoch=1  17.2 origins/s
+01:33:46 INFO chud_predictor.finetune: step 3420/6400  train_loss=0.07419  grad_norm=0.104  lr=5.12e-06  epoch=1  17.2 origins/s
+01:34:15 INFO chud_predictor.finetune: step 3440/6400  train_loss=0.06732  grad_norm=0.068  lr=5.07e-06  epoch=1  17.3 origins/s
+01:34:44 INFO chud_predictor.finetune: step 3460/6400  train_loss=0.07739  grad_norm=0.077  lr=5.03e-06  epoch=1  17.3 origins/s
+01:35:13 INFO chud_predictor.finetune: step 3480/6400  train_loss=0.07286  grad_norm=0.049  lr=4.99e-06  epoch=1  17.3 origins/s
+01:35:42 INFO chud_predictor.finetune: step 3500/6400  train_loss=0.07471  grad_norm=0.082  lr=4.94e-06  epoch=1  17.3 origins/s
+01:36:10 INFO chud_predictor.finetune: step 3520/6400  train_loss=0.07830  grad_norm=0.090  lr=4.90e-06  epoch=1  17.3 origins/s
+01:36:39 INFO chud_predictor.finetune: step 3540/6400  train_loss=0.07270  grad_norm=0.062  lr=4.85e-06  epoch=1  17.4 origins/s
+01:37:08 INFO chud_predictor.finetune: step 3560/6400  train_loss=0.07508  grad_norm=0.066  lr=4.81e-06  epoch=1  17.4 origins/s
+01:37:37 INFO chud_predictor.finetune: step 3580/6400  train_loss=0.07086  grad_norm=0.058  lr=4.76e-06  epoch=1  17.4 origins/s
+01:38:06 INFO chud_predictor.finetune: step 3600/6400  train_loss=0.07517  grad_norm=0.071  lr=4.72e-06  epoch=1  17.4 origins/s
+01:41:02 INFO chud_predictor.finetune: step 3600 val: pinball_c=7.5283  pinball_c_fan=7.5502  skill_pinball=0.0029  rmse_c=29.6019  skill_mse=-0.0045  skill_mae=0.0096  cover80=0.8150  settle_bss_persist=-0.0116  *best*
+01:41:32 INFO chud_predictor.finetune: step 3620/6400  train_loss=0.07471  grad_norm=0.079  lr=4.67e-06  epoch=1  17.0 origins/s
+01:42:01 INFO chud_predictor.finetune: step 3640/6400  train_loss=0.07286  grad_norm=0.072  lr=4.63e-06  epoch=1  17.0 origins/s
+01:42:30 INFO chud_predictor.finetune: step 3660/6400  train_loss=0.07070  grad_norm=0.070  lr=4.59e-06  epoch=1  17.0 origins/s
+01:42:59 INFO chud_predictor.finetune: step 3680/6400  train_loss=0.07579  grad_norm=0.075  lr=4.54e-06  epoch=1  17.1 origins/s
+01:43:28 INFO chud_predictor.finetune: step 3700/6400  train_loss=0.07127  grad_norm=0.087  lr=4.50e-06  epoch=1  17.1 origins/s
+01:43:57 INFO chud_predictor.finetune: step 3720/6400  train_loss=0.07409  grad_norm=0.063  lr=4.45e-06  epoch=1  17.1 origins/s
+01:44:25 INFO chud_predictor.finetune: step 3740/6400  train_loss=0.07437  grad_norm=0.070  lr=4.41e-06  epoch=1  17.1 origins/s
+01:44:54 INFO chud_predictor.finetune: step 3760/6400  train_loss=0.07396  grad_norm=0.068  lr=4.37e-06  epoch=1  17.1 origins/s
+01:45:23 INFO chud_predictor.finetune: step 3780/6400  train_loss=0.07473  grad_norm=0.082  lr=4.32e-06  epoch=1  17.2 origins/s
+01:45:52 INFO chud_predictor.finetune: step 3800/6400  train_loss=0.07425  grad_norm=0.067  lr=4.28e-06  epoch=1  17.2 origins/s
+01:46:21 INFO chud_predictor.finetune: step 3820/6400  train_loss=0.07259  grad_norm=0.059  lr=4.24e-06  epoch=1  17.2 origins/s
+01:46:50 INFO chud_predictor.finetune: step 3840/6400  train_loss=0.07335  grad_norm=0.069  lr=4.20e-06  epoch=1  17.2 origins/s
+01:47:18 INFO chud_predictor.finetune: step 3860/6400  train_loss=0.07420  grad_norm=0.083  lr=4.15e-06  epoch=1  17.2 origins/s
+01:47:47 INFO chud_predictor.finetune: step 3880/6400  train_loss=0.07198  grad_norm=0.061  lr=4.11e-06  epoch=1  17.3 origins/s
+01:48:16 INFO chud_predictor.finetune: step 3900/6400  train_loss=0.07223  grad_norm=0.063  lr=4.07e-06  epoch=1  17.3 origins/s
+01:48:45 INFO chud_predictor.finetune: step 3920/6400  train_loss=0.07352  grad_norm=0.065  lr=4.02e-06  epoch=1  17.3 origins/s
+01:49:14 INFO chud_predictor.finetune: step 3940/6400  train_loss=0.07460  grad_norm=0.073  lr=3.98e-06  epoch=1  17.3 origins/s
+01:49:43 INFO chud_predictor.finetune: step 3960/6400  train_loss=0.07047  grad_norm=0.081  lr=3.94e-06  epoch=1  17.3 origins/s
+01:50:11 INFO chud_predictor.finetune: step 3980/6400  train_loss=0.07614  grad_norm=0.065  lr=3.90e-06  epoch=1  17.4 origins/s
+01:50:40 INFO chud_predictor.finetune: step 4000/6400  train_loss=0.07660  grad_norm=0.101  lr=3.86e-06  epoch=1  17.4 origins/s
+01:53:37 INFO chud_predictor.finetune: step 4000 val: pinball_c=7.5436  pinball_c_fan=7.5502  skill_pinball=0.0009  rmse_c=29.5592  skill_mse=-0.0016  skill_mae=0.0080  cover80=0.8047  settle_bss_persist=-0.0091
+01:54:05 INFO chud_predictor.finetune: step 4020/6400  train_loss=0.07663  grad_norm=0.073  lr=3.81e-06  epoch=1  17.0 origins/s
+01:54:34 INFO chud_predictor.finetune: step 4040/6400  train_loss=0.07247  grad_norm=0.104  lr=3.77e-06  epoch=1  17.0 origins/s
+01:55:03 INFO chud_predictor.finetune: step 4060/6400  train_loss=0.07155  grad_norm=0.062  lr=3.73e-06  epoch=1  17.0 origins/s
+01:55:32 INFO chud_predictor.finetune: step 4080/6400  train_loss=0.07528  grad_norm=0.094  lr=3.69e-06  epoch=1  17.1 origins/s
+01:56:01 INFO chud_predictor.finetune: step 4100/6400  train_loss=0.07449  grad_norm=0.082  lr=3.65e-06  epoch=1  17.1 origins/s
+01:56:29 INFO chud_predictor.finetune: step 4120/6400  train_loss=0.07391  grad_norm=0.065  lr=3.61e-06  epoch=1  17.1 origins/s
+01:56:58 INFO chud_predictor.finetune: step 4140/6400  train_loss=0.07833  grad_norm=0.047  lr=3.57e-06  epoch=1  17.1 origins/s
+01:57:27 INFO chud_predictor.finetune: step 4160/6400  train_loss=0.07717  grad_norm=0.052  lr=3.53e-06  epoch=1  17.1 origins/s
+01:57:56 INFO chud_predictor.finetune: step 4180/6400  train_loss=0.07363  grad_norm=0.074  lr=3.49e-06  epoch=1  17.1 origins/s
+01:58:25 INFO chud_predictor.finetune: step 4200/6400  train_loss=0.07505  grad_norm=0.070  lr=3.45e-06  epoch=1  17.2 origins/s
+01:58:53 INFO chud_predictor.finetune: step 4220/6400  train_loss=0.07466  grad_norm=0.071  lr=3.41e-06  epoch=1  17.2 origins/s
+01:59:22 INFO chud_predictor.finetune: step 4240/6400  train_loss=0.06748  grad_norm=0.065  lr=3.37e-06  epoch=1  17.2 origins/s
+01:59:51 INFO chud_predictor.finetune: step 4260/6400  train_loss=0.07149  grad_norm=0.077  lr=3.33e-06  epoch=1  17.2 origins/s
+02:00:20 INFO chud_predictor.finetune: step 4280/6400  train_loss=0.07157  grad_norm=0.085  lr=3.29e-06  epoch=1  17.2 origins/s
+02:00:49 INFO chud_predictor.finetune: step 4300/6400  train_loss=0.07104  grad_norm=0.079  lr=3.25e-06  epoch=1  17.3 origins/s
+02:01:18 INFO chud_predictor.finetune: step 4320/6400  train_loss=0.07505  grad_norm=0.059  lr=3.21e-06  epoch=1  17.3 origins/s
+02:01:46 INFO chud_predictor.finetune: step 4340/6400  train_loss=0.07912  grad_norm=0.064  lr=3.17e-06  epoch=1  17.3 origins/s
+02:02:15 INFO chud_predictor.finetune: step 4360/6400  train_loss=0.07437  grad_norm=0.060  lr=3.13e-06  epoch=1  17.3 origins/s
+02:02:44 INFO chud_predictor.finetune: step 4380/6400  train_loss=0.07213  grad_norm=0.084  lr=3.10e-06  epoch=1  17.3 origins/s
+02:03:13 INFO chud_predictor.finetune: step 4400/6400  train_loss=0.07217  grad_norm=0.104  lr=3.06e-06  epoch=1  17.3 origins/s
+02:06:09 INFO chud_predictor.finetune: step 4400 val: pinball_c=7.5331  pinball_c_fan=7.5502  skill_pinball=0.0023  rmse_c=29.6182  skill_mse=-0.0056  skill_mae=0.0095  cover80=0.8031  settle_bss_persist=-0.0131
+02:06:38 INFO chud_predictor.finetune: step 4420/6400  train_loss=0.07197  grad_norm=0.060  lr=3.02e-06  epoch=1  17.0 origins/s
+02:07:06 INFO chud_predictor.finetune: step 4440/6400  train_loss=0.07732  grad_norm=0.075  lr=2.98e-06  epoch=1  17.0 origins/s
+02:07:35 INFO chud_predictor.finetune: step 4460/6400  train_loss=0.07293  grad_norm=0.073  lr=2.95e-06  epoch=1  17.0 origins/s
+02:08:04 INFO chud_predictor.finetune: step 4480/6400  train_loss=0.07819  grad_norm=0.067  lr=2.91e-06  epoch=1  17.0 origins/s
+02:08:33 INFO chud_predictor.finetune: step 4500/6400  train_loss=0.07511  grad_norm=0.059  lr=2.87e-06  epoch=1  17.1 origins/s
+02:09:02 INFO chud_predictor.finetune: step 4520/6400  train_loss=0.07486  grad_norm=0.072  lr=2.84e-06  epoch=1  17.1 origins/s
+02:09:31 INFO chud_predictor.finetune: step 4540/6400  train_loss=0.07364  grad_norm=0.095  lr=2.80e-06  epoch=1  17.1 origins/s
+02:10:00 INFO chud_predictor.finetune: step 4560/6400  train_loss=0.07516  grad_norm=0.081  lr=2.77e-06  epoch=1  17.1 origins/s
+02:10:28 INFO chud_predictor.finetune: step 4580/6400  train_loss=0.07347  grad_norm=0.077  lr=2.73e-06  epoch=1  17.1 origins/s
+02:10:57 INFO chud_predictor.finetune: step 4600/6400  train_loss=0.07830  grad_norm=0.089  lr=2.69e-06  epoch=1  17.2 origins/s
+02:11:26 INFO chud_predictor.finetune: step 4620/6400  train_loss=0.07732  grad_norm=0.071  lr=2.66e-06  epoch=1  17.2 origins/s
+02:11:55 INFO chud_predictor.finetune: step 4640/6400  train_loss=0.07410  grad_norm=0.066  lr=2.62e-06  epoch=1  17.2 origins/s
+02:12:24 INFO chud_predictor.finetune: step 4660/6400  train_loss=0.07279  grad_norm=0.096  lr=2.59e-06  epoch=1  17.2 origins/s
+02:12:53 INFO chud_predictor.finetune: step 4680/6400  train_loss=0.07656  grad_norm=0.059  lr=2.56e-06  epoch=1  17.2 origins/s
+02:13:21 INFO chud_predictor.finetune: step 4700/6400  train_loss=0.07367  grad_norm=0.086  lr=2.52e-06  epoch=1  17.2 origins/s
+02:13:50 INFO chud_predictor.finetune: step 4720/6400  train_loss=0.07336  grad_norm=0.087  lr=2.49e-06  epoch=1  17.3 origins/s
+02:14:19 INFO chud_predictor.finetune: step 4740/6400  train_loss=0.07279  grad_norm=0.076  lr=2.46e-06  epoch=1  17.3 origins/s
+02:14:48 INFO chud_predictor.finetune: step 4760/6400  train_loss=0.07317  grad_norm=0.069  lr=2.42e-06  epoch=1  17.3 origins/s
+02:15:17 INFO chud_predictor.finetune: step 4780/6400  train_loss=0.07202  grad_norm=0.091  lr=2.39e-06  epoch=1  17.3 origins/s
+02:15:45 INFO chud_predictor.finetune: step 4800/6400  train_loss=0.07319  grad_norm=0.080  lr=2.36e-06  epoch=1  17.3 origins/s
+02:18:42 INFO chud_predictor.finetune: step 4800 val: pinball_c=7.5260  pinball_c_fan=7.5502  skill_pinball=0.0032  rmse_c=29.5763  skill_mse=-0.0027  skill_mae=0.0100  cover80=0.8129  settle_bss_persist=-0.0095  *best*
+02:19:12 INFO chud_predictor.finetune: step 4820/6400  train_loss=0.07222  grad_norm=0.068  lr=2.33e-06  epoch=1  17.0 origins/s
+02:19:40 INFO chud_predictor.finetune: step 4840/6400  train_loss=0.07103  grad_norm=0.059  lr=2.29e-06  epoch=1  17.0 origins/s
+02:20:09 INFO chud_predictor.finetune: step 4860/6400  train_loss=0.07126  grad_norm=0.065  lr=2.26e-06  epoch=1  17.0 origins/s
+02:20:38 INFO chud_predictor.finetune: step 4880/6400  train_loss=0.07278  grad_norm=0.079  lr=2.23e-06  epoch=1  17.0 origins/s
+02:21:07 INFO chud_predictor.finetune: step 4900/6400  train_loss=0.07689  grad_norm=0.071  lr=2.20e-06  epoch=1  17.1 origins/s
+02:21:36 INFO chud_predictor.finetune: step 4920/6400  train_loss=0.07482  grad_norm=0.067  lr=2.17e-06  epoch=1  17.1 origins/s
+02:22:05 INFO chud_predictor.finetune: step 4940/6400  train_loss=0.07589  grad_norm=0.065  lr=2.14e-06  epoch=1  17.1 origins/s
+02:22:33 INFO chud_predictor.finetune: step 4960/6400  train_loss=0.07513  grad_norm=0.107  lr=2.11e-06  epoch=1  17.1 origins/s
+02:23:02 INFO chud_predictor.finetune: step 4980/6400  train_loss=0.07230  grad_norm=0.068  lr=2.08e-06  epoch=1  17.1 origins/s
+02:23:31 INFO chud_predictor.finetune: step 5000/6400  train_loss=0.07150  grad_norm=0.067  lr=2.05e-06  epoch=1  17.1 origins/s
+02:24:00 INFO chud_predictor.finetune: step 5020/6400  train_loss=0.07431  grad_norm=0.056  lr=2.02e-06  epoch=1  17.2 origins/s
+02:24:29 INFO chud_predictor.finetune: step 5040/6400  train_loss=0.06899  grad_norm=0.089  lr=2.00e-06  epoch=1  17.2 origins/s
+02:24:58 INFO chud_predictor.finetune: step 5060/6400  train_loss=0.07487  grad_norm=0.066  lr=1.97e-06  epoch=1  17.2 origins/s
+02:25:26 INFO chud_predictor.finetune: step 5080/6400  train_loss=0.07124  grad_norm=0.062  lr=1.94e-06  epoch=1  17.2 origins/s
+02:25:55 INFO chud_predictor.finetune: step 5100/6400  train_loss=0.07383  grad_norm=0.112  lr=1.91e-06  epoch=1  17.2 origins/s
+02:26:24 INFO chud_predictor.finetune: step 5120/6400  train_loss=0.07174  grad_norm=0.063  lr=1.89e-06  epoch=1  17.2 origins/s
+02:26:53 INFO chud_predictor.finetune: step 5140/6400  train_loss=0.07293  grad_norm=0.079  lr=1.86e-06  epoch=1  17.2 origins/s
+02:27:22 INFO chud_predictor.finetune: step 5160/6400  train_loss=0.07395  grad_norm=0.060  lr=1.83e-06  epoch=1  17.3 origins/s
+02:27:51 INFO chud_predictor.finetune: step 5180/6400  train_loss=0.07791  grad_norm=0.066  lr=1.81e-06  epoch=1  17.3 origins/s
+02:28:19 INFO chud_predictor.finetune: step 5200/6400  train_loss=0.07314  grad_norm=0.074  lr=1.78e-06  epoch=1  17.3 origins/s
+02:31:15 INFO chud_predictor.finetune: step 5200 val: pinball_c=7.5248  pinball_c_fan=7.5502  skill_pinball=0.0034  rmse_c=29.5713  skill_mse=-0.0024  skill_mae=0.0084  cover80=0.8189  settle_bss_persist=-0.0076  *best*
+02:31:45 INFO chud_predictor.finetune: step 5220/6400  train_loss=0.07487  grad_norm=0.053  lr=1.76e-06  epoch=1  17.0 origins/s
+02:32:14 INFO chud_predictor.finetune: step 5240/6400  train_loss=0.07447  grad_norm=0.059  lr=1.73e-06  epoch=1  17.0 origins/s
+02:32:43 INFO chud_predictor.finetune: step 5260/6400  train_loss=0.07289  grad_norm=0.059  lr=1.71e-06  epoch=1  17.0 origins/s
+02:33:12 INFO chud_predictor.finetune: step 5280/6400  train_loss=0.07609  grad_norm=0.059  lr=1.68e-06  epoch=1  17.0 origins/s
+02:33:41 INFO chud_predictor.finetune: step 5300/6400  train_loss=0.07867  grad_norm=0.063  lr=1.66e-06  epoch=1  17.1 origins/s
+02:34:09 INFO chud_predictor.finetune: step 5320/6400  train_loss=0.07188  grad_norm=0.084  lr=1.64e-06  epoch=1  17.1 origins/s
+02:34:38 INFO chud_predictor.finetune: step 5340/6400  train_loss=0.06826  grad_norm=0.057  lr=1.61e-06  epoch=1  17.1 origins/s
+02:35:07 INFO chud_predictor.finetune: step 5360/6400  train_loss=0.07099  grad_norm=0.058  lr=1.59e-06  epoch=1  17.1 origins/s
+02:35:36 INFO chud_predictor.finetune: step 5380/6400  train_loss=0.07242  grad_norm=0.119  lr=1.57e-06  epoch=1  17.1 origins/s
+02:36:05 INFO chud_predictor.finetune: step 5400/6400  train_loss=0.07280  grad_norm=0.068  lr=1.55e-06  epoch=1  17.1 origins/s
+02:36:34 INFO chud_predictor.finetune: step 5420/6400  train_loss=0.07404  grad_norm=0.059  lr=1.53e-06  epoch=1  17.1 origins/s
+02:37:03 INFO chud_predictor.finetune: step 5440/6400  train_loss=0.07457  grad_norm=0.070  lr=1.51e-06  epoch=1  17.2 origins/s
+02:37:32 INFO chud_predictor.finetune: step 5460/6400  train_loss=0.07245  grad_norm=0.064  lr=1.49e-06  epoch=1  17.2 origins/s
+02:38:00 INFO chud_predictor.finetune: step 5480/6400  train_loss=0.07855  grad_norm=0.072  lr=1.47e-06  epoch=1  17.2 origins/s
+02:38:29 INFO chud_predictor.finetune: step 5500/6400  train_loss=0.07565  grad_norm=0.063  lr=1.45e-06  epoch=1  17.2 origins/s
+02:38:58 INFO chud_predictor.finetune: step 5520/6400  train_loss=0.07209  grad_norm=0.055  lr=1.43e-06  epoch=1  17.2 origins/s
+02:39:26 INFO chud_predictor.finetune: step 5540/6400  train_loss=0.07792  grad_norm=0.083  lr=1.41e-06  epoch=1  17.2 origins/s
+02:39:55 INFO chud_predictor.finetune: step 5560/6400  train_loss=0.07301  grad_norm=0.078  lr=1.39e-06  epoch=1  17.2 origins/s
+02:40:24 INFO chud_predictor.finetune: step 5580/6400  train_loss=0.07395  grad_norm=0.073  lr=1.37e-06  epoch=1  17.3 origins/s
+02:40:52 INFO chud_predictor.finetune: step 5600/6400  train_loss=0.07296  grad_norm=0.067  lr=1.35e-06  epoch=1  17.3 origins/s
+02:43:47 INFO chud_predictor.finetune: step 5600 val: pinball_c=7.5241  pinball_c_fan=7.5502  skill_pinball=0.0035  rmse_c=29.5399  skill_mse=-0.0003  skill_mae=0.0092  cover80=0.7971  settle_bss_persist=-0.0072  *best*
+02:44:17 INFO chud_predictor.finetune: step 5620/6400  train_loss=0.06868  grad_norm=0.065  lr=1.34e-06  epoch=1  17.0 origins/s
+02:44:46 INFO chud_predictor.finetune: step 5640/6400  train_loss=0.07383  grad_norm=0.092  lr=1.32e-06  epoch=1  17.0 origins/s
+02:45:15 INFO chud_predictor.finetune: step 5660/6400  train_loss=0.07744  grad_norm=0.068  lr=1.30e-06  epoch=1  17.0 origins/s
+02:45:43 INFO chud_predictor.finetune: step 5680/6400  train_loss=0.07627  grad_norm=0.100  lr=1.29e-06  epoch=1  17.0 origins/s
+02:46:12 INFO chud_predictor.finetune: step 5700/6400  train_loss=0.07495  grad_norm=0.083  lr=1.27e-06  epoch=1  17.1 origins/s
+02:46:41 INFO chud_predictor.finetune: step 5720/6400  train_loss=0.07653  grad_norm=0.059  lr=1.26e-06  epoch=1  17.1 origins/s
+02:47:10 INFO chud_predictor.finetune: step 5740/6400  train_loss=0.07486  grad_norm=0.114  lr=1.24e-06  epoch=1  17.1 origins/s
+02:47:39 INFO chud_predictor.finetune: step 5760/6400  train_loss=0.07567  grad_norm=0.111  lr=1.23e-06  epoch=1  17.1 origins/s
+02:48:08 INFO chud_predictor.finetune: step 5780/6400  train_loss=0.07126  grad_norm=0.110  lr=1.21e-06  epoch=1  17.1 origins/s
+02:48:37 INFO chud_predictor.finetune: step 5800/6400  train_loss=0.07244  grad_norm=0.081  lr=1.20e-06  epoch=1  17.1 origins/s
+02:49:05 INFO chud_predictor.finetune: step 5820/6400  train_loss=0.07278  grad_norm=0.058  lr=1.19e-06  epoch=1  17.1 origins/s
+02:49:34 INFO chud_predictor.finetune: step 5840/6400  train_loss=0.07145  grad_norm=0.063  lr=1.17e-06  epoch=1  17.1 origins/s
+02:50:03 INFO chud_predictor.finetune: step 5860/6400  train_loss=0.07259  grad_norm=0.090  lr=1.16e-06  epoch=1  17.2 origins/s
+02:50:32 INFO chud_predictor.finetune: step 5880/6400  train_loss=0.07412  grad_norm=0.074  lr=1.15e-06  epoch=1  17.2 origins/s
+02:51:01 INFO chud_predictor.finetune: step 5900/6400  train_loss=0.07670  grad_norm=0.100  lr=1.14e-06  epoch=1  17.2 origins/s
+02:51:30 INFO chud_predictor.finetune: step 5920/6400  train_loss=0.07396  grad_norm=0.080  lr=1.13e-06  epoch=1  17.2 origins/s
+02:51:59 INFO chud_predictor.finetune: step 5940/6400  train_loss=0.07247  grad_norm=0.068  lr=1.12e-06  epoch=1  17.2 origins/s
+02:52:28 INFO chud_predictor.finetune: step 5960/6400  train_loss=0.07679  grad_norm=0.097  lr=1.11e-06  epoch=1  17.2 origins/s
+02:52:56 INFO chud_predictor.finetune: step 5980/6400  train_loss=0.07511  grad_norm=0.063  lr=1.10e-06  epoch=1  17.2 origins/s
+02:53:25 INFO chud_predictor.finetune: step 6000/6400  train_loss=0.07085  grad_norm=0.075  lr=1.09e-06  epoch=1  17.2 origins/s
+02:56:22 INFO chud_predictor.finetune: step 6000 val: pinball_c=7.5197  pinball_c_fan=7.5502  skill_pinball=0.0040  rmse_c=29.5447  skill_mse=-0.0006  skill_mae=0.0089  cover80=0.8088  settle_bss_persist=-0.0065  *best*
+02:56:52 INFO chud_predictor.finetune: step 6020/6400  train_loss=0.07037  grad_norm=0.067  lr=1.08e-06  epoch=1  17.0 origins/s
+02:57:21 INFO chud_predictor.finetune: step 6040/6400  train_loss=0.07509  grad_norm=0.055  lr=1.07e-06  epoch=1  17.0 origins/s
+02:57:49 INFO chud_predictor.finetune: step 6060/6400  train_loss=0.07562  grad_norm=0.087  lr=1.06e-06  epoch=1  17.0 origins/s
+02:58:18 INFO chud_predictor.finetune: step 6080/6400  train_loss=0.07468  grad_norm=0.083  lr=1.06e-06  epoch=1  17.0 origins/s
+02:58:34 WARNING chud_predictor.finetune: step 6091: non-finite gradient, update skipped (2 so far)
+02:58:47 INFO chud_predictor.finetune: step 6100/6400  train_loss=0.07105  grad_norm=0.066  lr=1.05e-06  epoch=1  17.0 origins/s
+02:59:16 INFO chud_predictor.finetune: step 6120/6400  train_loss=0.07718  grad_norm=0.072  lr=1.04e-06  epoch=1  17.1 origins/s
+02:59:45 INFO chud_predictor.finetune: step 6140/6400  train_loss=0.07254  grad_norm=0.085  lr=1.04e-06  epoch=1  17.1 origins/s
+03:00:14 INFO chud_predictor.finetune: step 6160/6400  train_loss=0.06843  grad_norm=0.094  lr=1.03e-06  epoch=1  17.1 origins/s
+03:00:43 INFO chud_predictor.finetune: step 6180/6400  train_loss=0.06936  grad_norm=0.076  lr=1.03e-06  epoch=1  17.1 origins/s
+03:01:12 INFO chud_predictor.finetune: step 6200/6400  train_loss=0.07489  grad_norm=0.117  lr=1.02e-06  epoch=1  17.1 origins/s
+03:01:40 INFO chud_predictor.finetune: step 6220/6400  train_loss=0.07977  grad_norm=0.095  lr=1.02e-06  epoch=1  17.1 origins/s
+03:02:09 INFO chud_predictor.finetune: step 6240/6400  train_loss=0.07594  grad_norm=0.059  lr=1.01e-06  epoch=1  17.1 origins/s
+03:02:38 INFO chud_predictor.finetune: step 6260/6400  train_loss=0.07426  grad_norm=0.079  lr=1.01e-06  epoch=1  17.1 origins/s
+03:03:07 INFO chud_predictor.finetune: step 6280/6400  train_loss=0.07534  grad_norm=0.071  lr=1.01e-06  epoch=1  17.2 origins/s
+03:03:36 INFO chud_predictor.finetune: step 6300/6400  train_loss=0.07824  grad_norm=0.050  lr=1.01e-06  epoch=1  17.2 origins/s
+03:04:05 INFO chud_predictor.finetune: step 6320/6400  train_loss=0.07293  grad_norm=0.081  lr=1.00e-06  epoch=1  17.2 origins/s
+03:04:34 INFO chud_predictor.finetune: step 6340/6400  train_loss=0.07480  grad_norm=0.074  lr=1.00e-06  epoch=1  17.2 origins/s
+03:04:41 WARNING chud_predictor.finetune: step 6345: non-finite gradient, update skipped (3 so far)
+03:05:03 INFO chud_predictor.finetune: step 6360/6400  train_loss=0.07276  grad_norm=0.075  lr=1.00e-06  epoch=1  17.2 origins/s
+03:05:32 INFO chud_predictor.finetune: step 6380/6400  train_loss=0.07112  grad_norm=0.068  lr=1.00e-06  epoch=2  17.2 origins/s
+03:06:01 INFO chud_predictor.finetune: step 6400/6400  train_loss=0.07560  grad_norm=0.081  lr=1.00e-06  epoch=2  17.2 origins/s
+03:08:57 INFO chud_predictor.finetune: step 6400 val: pinball_c=7.5216  pinball_c_fan=7.5502  skill_pinball=0.0038  rmse_c=29.5530  skill_mse=-0.0012  skill_mae=0.0092  cover80=0.8031  settle_bss_persist=-0.0073
+03:08:58 INFO chud_predictor.model: loading data/finetune/20260920-234154-finetune-c1024-full_rv/best on cuda (AMD Instinct MI300X VF, torch 2.14.0+rocm7.2) (batch 32)
+03:14:52 INFO chud_predictor.finetune: fine-tune run written to data/finetune/20260920-234154-finetune-c1024-full_rv
+Loading weights from local directory
+== Fine-tune 20260920-234154-finetune-c1024-full_rv ==
+context 1024, covariates 'full_rv', trainable all, loss scale none
+steps run 6400 (3 skipped for non-finite gradients), best validation step 6000
+
+== Splits (target ranges, UTC) ==
+ train  [2025-12-19 06:57, 2026-06-27 00:00)    203750 origins
+   val  [2026-06-28 00:00, 2026-08-06 00:00)     46580 origins
+  test  [2026-08-07 00:00, 2026-09-17 02:00)     45708 origins
+embargo 1440 bars between splits
+
+== Scores over all steps to expiry, cents (skill > 0 beats persistence: the last mid, 0.50 at the open, and its train-split fan) ==
+     model  split          pinball_c      pinball_c_fan      skill_pinball             rmse_c     rmse_c_persist          skill_mse          skill_mae            cover80 settle_bss_persist
+ zero-shot    val             9.9209             7.5502            -0.3140            32.4183            29.5360            -0.2047             0.0017             0.2905            -0.4930
+ zero-shot   test             9.6206             7.3704            -0.3053            31.5657            28.6758            -0.2117            -0.0175             0.2957            -0.4601
+ finetuned    val             7.5197             7.5502             0.0040            29.5447            29.5360            -0.0006             0.0089             0.8088            -0.0065
+ finetuned   test             7.4037             7.3704            -0.0045            28.7483            28.6758            -0.0051            -0.0020             0.7810            -0.0148
+
+Backtest the held-out test dates (validation and train dates are contaminated for this checkpoint):
+  chudp backtest-contract --config configs/contract_full.toml --context 1024 --covariates full_rv --fan-from data/finetune/20260920-234154-finetune-c1024-full_rv/baselines.parquet --start 2026-08-07 --end 2026-09-17 --model-id data/finetune/20260920-234154-finetune-c1024-full_rv/best
+  chudp backtest-contract --config configs/contract_full.toml --context 1024 --covariates full_rv --fan-from data/finetune/20260920-234154-finetune-c1024-full_rv/baselines.parquet --start 2026-08-07 --end 2026-09-17    # zero-shot on the same dates
+
+run dir: data/finetune/20260920-234154-finetune-c1024-full_rv

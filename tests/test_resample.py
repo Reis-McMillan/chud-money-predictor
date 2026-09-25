@@ -1,6 +1,7 @@
 import json
 from datetime import datetime, timedelta
 
+import numpy as np
 import polars as pl
 import pytest
 from conftest import synthetic_ticks, write_raw
@@ -28,11 +29,34 @@ def test_bars_ohlc_mean_and_gaps():
     assert b0["n_ticks"] == 60 and b0["n_raw_ticks"] == 60
 
 
+def test_realized_variance_and_tail_returns():
+    # a 90-second hole from 00:10:30, and a lone tick in minute 20
+    drop = set(range(10 * 60 + 30, 10 * 60 + 30 + 90)) | (set(range(20 * 60, 21 * 60)) - {20 * 60 + 7})
+    ticks = synthetic_ticks(datetime(2025, 9, 18), 3_600, seed=3, drop=drop)
+    bars = to_bars(ticks.lazy(), "1m")
+    lv = np.log(ticks["value"].to_numpy())
+    r = np.diff(lv)                                   # r[j] is the return INTO tick j + 1
+    # minute 5 is full: 60 returns, the first one from the last tick of minute 4
+    b5 = bars.row(5, named=True)
+    assert b5["rv_1s"] == pytest.approx((r[5 * 60 - 1:6 * 60 - 1] ** 2).sum())
+    assert b5["ret_l10"] == pytest.approx(lv[6 * 60 - 1] - lv[5 * 60 + 49]) and b5["ret_l30"] == pytest.approx(lv[6 * 60 - 1] - lv[5 * 60 + 29])
+    # the first bar has no return into its first tick: 59 returns scaled to 60
+    assert bars["rv_1s"][0] == pytest.approx((r[:59] ** 2).sum() * 60 / 59)
+    # minute 10 keeps its first 30 seconds: variance scaled up, no tail returns; the gap and the lone tick have neither
+    b10 = bars.row(10, named=True)
+    assert b10["rv_1s"] == pytest.approx((r[10 * 60 - 1:10 * 60 + 29] ** 2).sum() * 2) and b10["ret_l10"] is None
+    assert bars["rv_1s"][11] is None and bars["rv_1s"][20] is None and bars["ret_l30"][20] is None
+    # minute 12 opens after the hole: the 91-second return into its first tick is dropped
+    i12 = 12 * 60 - 90                                # 90 ticks are missing before minute 12
+    assert bars["rv_1s"][12] == pytest.approx((r[i12:i12 + 59] ** 2).sum() * 60 / 59)
+    assert bars["rv_1s"].drop_nulls().min() > 0
+
+
 def test_once_per_second_and_five_hz_give_identical_bars():
     """The index table switched from 1 Hz to 5 Hz; bars must not change with the tick density."""
     one = to_bars(synthetic_ticks(datetime(2026, 5, 1), 3_600, seed=7, hz=1).lazy(), "1m")
     five = to_bars(synthetic_ticks(datetime(2026, 5, 1), 3_600, seed=7, hz=5).lazy(), "1m")
-    stats = ["ts", "open", "high", "low", "close", "mean", "std", "n_ticks", "is_gap", "is_full"]
+    stats = ["ts", "open", "high", "low", "close", "mean", "std", "rv_1s", "ret_l10", "ret_l30", "n_ticks", "is_gap", "is_full"]
     assert one.select(stats).equals(five.select(stats))
     assert (one["n_raw_ticks"] == 60).all() and (five["n_raw_ticks"] == 300).all() and five["is_full"].all()
 
@@ -57,7 +81,7 @@ def test_build_cache_and_schema_guard(tmp_path):
     write_raw(synthetic_ticks(datetime(2025, 9, 19), 3_600, seed=6, hz=5), raw)
     out, meta = build(raw, processed, "1m")
     assert meta["n_bars"] == 1440 + 60 and meta["n_gaps"] == 0 and meta["n_ticks_histogram"] == {"60": 1500}
-    assert meta["days_once_per_second"] == 1 and meta["days_sub_second"] == 1 and meta["schema_version"] == 3
+    assert meta["days_once_per_second"] == 1 and meta["days_sub_second"] == 1 and meta["schema_version"] == 4
     assert load_bars(processed, "1m").height == 1500
     _, meta2 = build(raw, processed, "1m")
     assert meta2["built_at"] == meta["built_at"]  # cache hit
@@ -67,7 +91,7 @@ def test_build_cache_and_schema_guard(tmp_path):
     with pytest.raises(RuntimeError, match="re-run"):
         load_bars(processed, "1m")
     _, meta3 = build(raw, processed, "1m")
-    assert meta3["schema_version"] == 3 and meta3["built_at"] != meta["built_at"]
+    assert meta3["schema_version"] == 4 and meta3["built_at"] != meta["built_at"]
 
 
 def test_last_second_of_bar_is_its_close():

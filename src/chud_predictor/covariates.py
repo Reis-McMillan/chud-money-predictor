@@ -35,6 +35,14 @@ PO_EXPRS: dict[str, tuple[pl.Expr, str]] = {
     "moneyness": (pl.col("moneyness"), "interp"),
     "rw_z": (pl.col("rw_z"), "interp"),
     "rw_p": (pl.col("rw_p"), "interp"),
+    # the one-second family: realized vol, the fair value built on it, its distance from the price, the bar's last seconds
+    "brti_sigma_rv": (pl.col("sigma_rv"), "interp"),
+    "brti_vol_ratio": (pl.col("vol_ratio"), "interp"),
+    "rw_z_rv": (pl.col("rw_z_rv"), "interp"),
+    "rw_p_rv": (pl.col("rw_p_rv"), "interp"),
+    "rw_gap_rv": (pl.col("rw_gap_rv"), "interp"),
+    "brti_ret_l10": (pl.col("ret_l10_std"), "zero"),
+    "brti_ret_l30": (pl.col("ret_l30_std"), "zero"),
     "yes_bid_close": (pl.col("yes_bid_close"), "interp"),
     "yes_ask_close": (pl.col("yes_ask_close"), "interp"),
     "spread": (pl.col("spread"), "interp"),
@@ -49,9 +57,13 @@ PO_BRTI = ("brti_log_close", "brti_ret_1m", "brti_range", "brti_sigma_1m", "brti
 PO_QUOTES = ("yes_bid_close", "yes_ask_close", "spread", "mid_high", "mid_low", "mid_ret_1m", "trade_close_imp", "log_volume", "log_oi")
 PF_CALENDAR = ("k_frac", "k_sin", "k_cos", "sqrt_ttl", "tod_sin", "tod_cos")
 PF_FAIR = ("rw_fair_path",)
+PO_BRTI_RV = ("brti_log_close", "brti_ret_1m", "brti_range", "brti_sigma_rv", "brti_vol_ratio", "brti_mean_dev", "moneyness",
+              "rw_z_rv", "rw_p_rv", "rw_gap_rv", "brti_ret_l10", "brti_ret_l30")
+PF_FAIR_RV = ("rw_fair_path_rv",)   # the same path on sigma_rv / rw_p_rv
 
 PRESETS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "full": (PO_BRTI + PO_QUOTES, PF_CALENDAR + PF_FAIR),
+    "full_rv": (PO_BRTI_RV + PO_QUOTES, PF_CALENDAR + PF_FAIR_RV),
     "no_fair_path": (PO_BRTI + PO_QUOTES, PF_CALENDAR),
     "brti_only": (PO_BRTI, PF_CALENDAR + PF_FAIR),
     "quotes_only": (PO_QUOTES, PF_CALENDAR),
@@ -113,12 +125,13 @@ def frame_arrays(frame: pl.DataFrame, preset: str = "full") -> FrameArrays:
         x = col(expr)
         x[~np.isfinite(x)] = np.nan
         po[j] = np.nan_to_num(x, nan=0.0) if fill == "zero" else x
+    rw_p, sigma = ("rw_p_rv", "sigma_rv") if PF_FAIR_RV[0] in pf_names else ("rw_p", "sigma_1m")
     return FrameArrays(
         preset=preset, po_names=po_names, pf_names=pf_names,
         target=col(pl.col("mid_close")), valid=frame["target_valid"].to_numpy().astype(bool), po=po,
         k=frame["k"].to_numpy().astype(np.int64), minute_of_day=frame["minute_of_day"].to_numpy().astype(np.int64),
-        rw_p=col(pl.col("rw_p")), brti_close=col(pl.col("brti_close")), brti_mean=col(pl.col("brti_mean")),
-        strike=col(pl.col("strike")), sigma=col(pl.col("sigma_1m")),
+        rw_p=col(pl.col(rw_p)), brti_close=col(pl.col("brti_close")), brti_mean=col(pl.col("brti_mean")),
+        strike=col(pl.col("strike")), sigma=col(pl.col(sigma)),
     )
 
 
@@ -208,7 +221,7 @@ def build_arrays(fa: FrameArrays, i: np.ndarray, context: int, horizon: int = 64
         cal_ctx, cal_fut = _calendar(fa.k[ctx], fa.minute_of_day[ctx]), _calendar(k_fut, mod_fut)
         parts = []
         for name in fa.pf_names:
-            if name == "rw_fair_path":
+            if name in PF_FAIR + PF_FAIR_RV:
                 # fair value if BRTI stays at its last close; strike as known at the origin (rows <= i only)
                 strike = np.where(m == 0, fa.brti_mean[i], fa.strike[i])
                 with np.errstate(divide="ignore", invalid="ignore"):

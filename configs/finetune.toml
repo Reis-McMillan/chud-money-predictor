@@ -1,7 +1,7 @@
 # MI300X profile for `chudp finetune`. Flags override these values.
 [finetune]
 context = 1024
-covariates = "full"
+covariates = "full"        # "full_rv" adds the one-second realized-vol family (29 variates; micro_batch = 8 still fits)
 start = "2025-12-15"       # contract era with a published strike
 # Chronological split over the usable span; set val_start / test_start (YYYY-MM-DD) to pin the dates.
 val_frac = 0.15
@@ -13,7 +13,7 @@ precision = "fp32"         # bf16 is ~2x faster, but inference (and evaluation) 
 loss_scale = "none"        # pinball in price space (dollars)
 lr = 1e-5
 warmup_steps = 100
-max_steps = 20000
+max_steps = 6400
 batch_size = 32
 # Memory scales with tokens per pass = micro_batch * variates * (context / 32 + 2). On ROCm 7.2 /
 # torch 2.14 the fp32 backward pass segfaulted somewhere above ~12.5k tokens (96 univariate samples at
@@ -21,7 +21,7 @@ batch_size = 32
 # (<= 4 at context 2048) and raise batch_size, not this, for a larger effective batch.
 micro_batch = 8
 
-eval_every = 200
-eval_samples = 8192
-patience = 5
+eval_every = 400
+eval_samples = 16384
+patience = 0
 device = "auto"

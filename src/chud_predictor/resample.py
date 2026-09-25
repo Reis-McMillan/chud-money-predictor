@@ -10,6 +10,12 @@ once-per-second index, so every bar statistic (open / high / low / close / mean 
 is computed on the on-the-second ticks only. That keeps the series homogeneous across the density
 change. `n_raw_ticks` counts all ticks and is a diagnostic, never a model input.
 
+Inside-the-bar statistics, from the same on-the-second ticks: `rv_1s` is the realized variance of the
+bar, the sum of squared one-second log returns scaled to a full bar (null with fewer than half the
+bar's returns, so a sparse bar is never a zero-variance bar); `ret_l10` / `ret_l30` are the log
+returns over the last 10 / 30 seconds of the bar. A return belongs to the bar of its later tick; one
+that spans more than a minute or a UTC midnight is dropped.
+
 `mean` is the Kalshi settlement quantity: the settlement of a window opening at T0 is the mean of
 the once-per-second index over [T0+14m, T0+15m), i.e. `mean` of the 1m bar labelled T0+14m. The
 strike of that window is `mean` of the bar labelled T0-1m.
@@ -26,9 +32,11 @@ import polars as pl
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 FREQ_SECONDS: dict[str, int] = {"1s": 1, "5s": 5, "15s": 15, "30s": 30, "1m": 60, "5m": 300, "15m": 900, "1h": 3600}
-BAR_COLUMNS = ["ts", "open", "high", "low", "close", "mean", "std", "n_ticks", "n_raw_ticks", "is_gap", "is_full"]
+BAR_COLUMNS = ["ts", "open", "high", "low", "close", "mean", "std", "rv_1s", "ret_l10", "ret_l30", "n_ticks", "n_raw_ticks", "is_gap", "is_full"]
+MAX_RETURN_GAP_S = 60   # a return across a longer hole is not one bar's variance
+TAIL_TOLERANCE_S = 5    # how far from its mark a tick of the last-N-seconds return may sit
 ON_SECOND = pl.col("ts").dt.truncate("1s") == pl.col("ts")
 
 
@@ -59,14 +67,30 @@ def load_raw(raw_dir: Path, start: date | None = None, end: date | None = None) 
 
 def aggregate(ticks: pl.DataFrame, freq: str) -> pl.DataFrame:
     """Bars for the intervals that contain ticks (no grid completion). `ticks` must be sorted."""
+    S = freq_seconds(freq)
     raw = ticks.group_by_dynamic("ts", every=freq, closed="left", label="left").agg(pl.len().alias("n_raw_ticks"))
-    sec = ticks.filter(ON_SECOND).group_by_dynamic("ts", every=freq, closed="left", label="left").agg(
+    dt = pl.col("ts").diff().dt.total_seconds()
+    same_day = pl.col("ts").dt.date() == pl.col("ts").dt.date().shift(1)
+    off = (pl.col("ts") - pl.col("ts").dt.truncate(freq)).dt.total_seconds()
+    lv, r1 = pl.col("_lv"), pl.col("_r1")
+
+    def tail(seconds: int) -> pl.Expr:
+        mark = S - 1 - seconds
+        ref = lv.filter((pl.col("_off") <= mark) & (pl.col("_off") > mark - TAIL_TOLERANCE_S)).last()
+        return pl.when(pl.col("_off").last() >= S - TAIL_TOLERANCE_S).then(lv.last() - ref)
+
+    sec = ticks.filter(ON_SECOND).with_columns(pl.col("value").log().alias("_lv"), off.alias("_off")).with_columns(
+        pl.when((dt <= MAX_RETURN_GAP_S) & same_day).then(pl.col("_lv").diff()).alias("_r1"),
+    ).group_by_dynamic("ts", every=freq, closed="left", label="left").agg(
         pl.col("value").first().alias("open"),
         pl.col("value").max().alias("high"),
         pl.col("value").min().alias("low"),
         pl.col("value").last().alias("close"),
         pl.col("value").mean().alias("mean"),
         pl.col("value").std(ddof=0).alias("std"),
+        pl.when(r1.count() >= max(S // 2, 1)).then((r1 ** 2).sum() * S / r1.count()).alias("rv_1s"),
+        tail(10).alias("ret_l10"),
+        tail(30).alias("ret_l30"),
         pl.len().alias("n_ticks"),
     )
     if raw.height and sec.is_empty():
@@ -130,6 +154,7 @@ def describe_bars(bars: pl.DataFrame, freq: str) -> dict:
         "n_bars": bars.height,
         "n_gaps": int(flags.sum()),
         "n_not_full": int((~bars["is_full"]).sum()),
+        "n_no_rv": int(bars["rv_1s"].is_null().sum()),
         "largest_gap_bars": largest,
         "first_ts": bars["ts"].min().isoformat() if bars.height else None,
         "last_ts": bars["ts"].max().isoformat() if bars.height else None,

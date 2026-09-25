@@ -27,12 +27,13 @@ from .resample import bars_path, load_bars, raw_files
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 WINDOW_MINUTES = 15
 SETTLE_K = WINDOW_MINUTES - 1
 MAX_QUOTE_SPREAD = 0.10
 RW_Z_CLIP = 8.0
 SETTLED_H = 1e-4          # "no time left": the fair value of a settled contract is 0 or 1
+RV_FAST, RV_SLOW = 15, 240  # windows of the realized-vol regime ratio
 
 _erf = np.vectorize(math.erf, otypes=[np.float64])
 
@@ -68,9 +69,25 @@ def _first_over_window(col: str) -> pl.Expr:
     return pl.col(col).drop_nulls().first().over("t0")
 
 
-def build_frame_from(bars: pl.DataFrame, candles: pl.DataFrame | None, vol_lookback: int = 240) -> pl.DataFrame:
+def _rv_sigma(window: int) -> pl.Expr:
+    """Per-minute sigma from the realized variance of the last `window` bars (nulls, i.e. gaps, are skipped)."""
+    return pl.col("brti_rv_1s").rolling_mean(window_size=window, min_samples=max(window // 2, 1)).sqrt()
+
+
+def _rw_z(sigma: str) -> pl.Expr:
+    # the settled row is judged on what settles the market: the bar mean, not its close
+    num = pl.when(pl.col("is_settlement")).then((pl.col("brti_mean") / pl.col("strike")).log()).otherwise(pl.col("moneyness"))
+    return (num / (pl.col(sigma) * h_eff(pl.col("k").cast(pl.Float64)).sqrt())).clip(-RW_Z_CLIP, RW_Z_CLIP)
+
+
+def _rw_p(frame: pl.DataFrame, z: str, name: str) -> pl.DataFrame:
+    rw_z = frame[z].to_numpy()
+    return frame.with_columns(pl.Series(name, np.where(np.isfinite(rw_z), norm_cdf(np.nan_to_num(rw_z)), np.nan)).fill_nan(None))
+
+
+def build_frame_from(bars: pl.DataFrame, candles: pl.DataFrame | None, vol_lookback: int = 240, rv_lookback: int = 30) -> pl.DataFrame:
     """Pure join + feature derivation (no I/O)."""
-    frame = bars.rename({c: f"brti_{c}" for c in ("open", "high", "low", "close", "mean", "std", "is_gap", "is_full")})
+    frame = bars.rename({c: f"brti_{c}" for c in ("open", "high", "low", "close", "mean", "std", "rv_1s", "ret_l10", "ret_l30", "is_gap", "is_full")})
     if candles is not None and candles.height:
         c = candles.with_columns((pl.col("ts") - pl.duration(minutes=1)).alias("bar_ts")).drop("ts")
         per_bar = c.group_by("bar_ts").agg(pl.col("ticker").n_unique().alias("n"))
@@ -118,18 +135,22 @@ def build_frame_from(bars: pl.DataFrame, candles: pl.DataFrame | None, vol_lookb
         # within-contract price change; crossing a window boundary compares two different contracts
         pl.when(pl.col("k") > 0).then(pl.col("mid_close") - pl.col("mid_close").shift(1)).otherwise(None).alias("mid_ret_1m"),
         pl.col("ret_1m").rolling_std(window_size=vol_lookback, min_samples=max(10, vol_lookback // 4)).alias("sigma_1m"),
+        # the same quantity from one-second returns: precise enough for a window short enough to follow the vol regime
+        _rv_sigma(rv_lookback).alias("sigma_rv"),
+        (_rv_sigma(RV_FAST) / _rv_sigma(RV_SLOW)).log().alias("vol_ratio"),
         pl.coalesce("trade_close", "mid_close").alias("trade_close_imp"),
         pl.coalesce("trade_mean", "mid_close").alias("trade_mean_imp"),
         (pl.col("has_candle") & pl.col("yes_bid_close").is_not_null() & pl.col("yes_ask_close").is_not_null()).alias("target_valid"),
         (pl.col("k") == SETTLE_K).alias("is_settlement"),
     ).with_columns(
         (pl.col("target_valid") & (pl.col("spread") <= MAX_QUOTE_SPREAD)).alias("quote_ok"),
-        # the settled row is judged on what settles the market: the bar mean, not its close
-        (pl.when(pl.col("is_settlement")).then((pl.col("brti_mean") / pl.col("strike")).log()).otherwise(pl.col("moneyness"))
-         / (pl.col("sigma_1m") * h_eff(pl.col("k").cast(pl.Float64)).sqrt())).clip(-RW_Z_CLIP, RW_Z_CLIP).alias("rw_z"),
+        _rw_z("sigma_1m").alias("rw_z"),
+        _rw_z("sigma_rv").alias("rw_z_rv"),
+        (pl.col("brti_ret_l10") / pl.col("sigma_rv")).alias("ret_l10_std"),
+        (pl.col("brti_ret_l30") / pl.col("sigma_rv")).alias("ret_l30_std"),
     )
-    rw_z = frame["rw_z"].to_numpy()
-    frame = frame.with_columns(pl.Series("rw_p", np.where(np.isfinite(rw_z), norm_cdf(np.nan_to_num(rw_z)), np.nan)).fill_nan(None))
+    frame = _rw_p(_rw_p(frame, "rw_z", "rw_p"), "rw_z_rv", "rw_p_rv")
+    frame = frame.with_columns((pl.col("rw_p_rv") - pl.col("mid_close")).alias("rw_gap_rv"))
     # outcomes, one per window: the price's own verdict and the index's
     frame = frame.with_columns(
         pl.when(pl.col("is_settlement") & pl.col("target_valid")).then((pl.col("mid_close") > 0.5).cast(pl.Int8)).otherwise(None).alias("_op"),
@@ -155,6 +176,7 @@ def describe_frame(frame: pl.DataFrame) -> dict:
         "n_rows": frame.height,
         "first_ts": frame["ts"].min().isoformat(),
         "last_ts": frame["ts"].max().isoformat(),
+        "n_rows_no_sigma_rv": int(frame["sigma_rv"].is_null().sum()),
         "n_rows_with_candle": with_candle.height,
         "contract_first_ts": with_candle["ts"].min().isoformat() if with_candle.height else None,
         "contract_last_ts": with_candle["ts"].max().isoformat() if with_candle.height else None,
@@ -176,23 +198,24 @@ def _source_mtime(processed_dir: Path, contracts_raw_dir: Path, freq: str) -> fl
     return m
 
 
-def build_frame(processed_dir: Path, contracts_raw_dir: Path, *, freq: str = "1m", vol_lookback: int = 240, force: bool = False) -> tuple[Path, dict]:
+def build_frame(processed_dir: Path, contracts_raw_dir: Path, *, freq: str = "1m", vol_lookback: int = 240, rv_lookback: int = 30,
+                force: bool = False) -> tuple[Path, dict]:
     out, mp = frame_path(processed_dir, freq), frame_meta_path(processed_dir, freq)
     bars = load_bars(processed_dir, freq)
     src_mtime = _source_mtime(processed_dir, contracts_raw_dir, freq)
     if out.exists() and mp.exists() and not force:
         meta = json.loads(mp.read_text())
-        if meta.get("schema_version") == SCHEMA_VERSION and meta.get("source_mtime", 0.0) >= src_mtime and meta.get("vol_lookback") == vol_lookback:
+        if meta.get("schema_version") == SCHEMA_VERSION and meta.get("source_mtime", 0.0) >= src_mtime and meta.get("vol_lookback") == vol_lookback and meta.get("rv_lookback") == rv_lookback:
             log.info("frame cache up to date: %s", out)
             return out, meta
     has_contracts = contracts_raw_dir.exists() and any(contracts_raw_dir.glob("date=*.parquet"))
     if not has_contracts:
         log.warning("no contract candles under %s; the frame will carry BRTI columns only", contracts_raw_dir)
-    frame = build_frame_from(bars, load_contract_candles(contracts_raw_dir) if has_contracts else None, vol_lookback)
+    frame = build_frame_from(bars, load_contract_candles(contracts_raw_dir) if has_contracts else None, vol_lookback, rv_lookback)
     tmp = out.with_suffix(".parquet.tmp")
     frame.write_parquet(tmp, compression="zstd", compression_level=3, statistics=True)
     tmp.replace(out)
-    meta = describe_frame(frame) | {"source_mtime": src_mtime, "vol_lookback": vol_lookback, "freq": freq}
+    meta = describe_frame(frame) | {"source_mtime": src_mtime, "vol_lookback": vol_lookback, "rv_lookback": rv_lookback, "freq": freq}
     mp.write_text(json.dumps(meta, indent=1))
     rate = meta["outcome_disagreement_rate"]
     if rate is not None and rate > 0.01:

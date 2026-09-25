@@ -71,6 +71,12 @@ def test_fair_value_columns(contract_world):
     assert r["moneyness"] == pytest.approx(np.log(r["brti_close"] / r["strike"]))
     # seen from the close of row 9 (= minute 10 of the window) the settlement minute starts 4 bars ahead
     assert r["rw_z"] == pytest.approx(np.clip(r["moneyness"] / (r["sigma_1m"] * np.sqrt(13 - 9 + 1 / 3)), -8, 8))
+    # the one-second twin: sigma from the realized variance of the last 30 bars
+    i = int(r["idx"])
+    assert r["sigma_rv"] == pytest.approx(np.sqrt(frame["brti_rv_1s"][i - 29:i + 1].mean()))
+    assert r["rw_z_rv"] == pytest.approx(np.clip(r["moneyness"] / (r["sigma_rv"] * np.sqrt(13 - 9 + 1 / 3)), -8, 8))
+    assert r["rw_gap_rv"] == pytest.approx(r["rw_p_rv"] - r["mid_close"]) and r["ret_l10_std"] == pytest.approx(r["brti_ret_l10"] / r["sigma_rv"])
+    assert 0.5 < frame["sigma_rv"].mean() / frame["sigma_1m"].mean() < 2       # two estimators of one number
     ok = frame.filter(pl.col("rw_p").is_not_null() & ~pl.col("is_settlement"))
     assert ((ok["rw_p"] >= 0) & (ok["rw_p"] <= 1)).all() and ((ok["rw_p"] > 0.5) == (ok["moneyness"] > 0)).all()
     # a settled row's fair value is the outcome itself
@@ -100,6 +106,8 @@ def test_build_cache_and_load(contract_world, tmp_path):
     assert frame.equals(contract_world["frame"]) and meta["n_rows"] == 2880
     assert build_frame(processed, craw, vol_lookback=60)[1]["built_at"] == meta["built_at"]          # cache hit
     assert build_frame(processed, craw, vol_lookback=90)[1]["built_at"] != meta["built_at"]          # parameter change rebuilds
+    _, meta_rv = build_frame(processed, craw, vol_lookback=90, rv_lookback=15)
+    assert meta_rv["rv_lookback"] == 15 and build_frame(processed, craw, vol_lookback=90, rv_lookback=15)[1]["built_at"] == meta_rv["built_at"]
     # without contract files the frame still builds, BRTI only
     _, meta_b = build_frame(processed, tmp_path / "nothing", vol_lookback=60, force=True)
     assert meta_b["n_rows_with_candle"] == 0 and load_frame(processed)["mid_close"].null_count() == 2880
