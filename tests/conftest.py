@@ -1,12 +1,10 @@
 """Shared fixtures: synthetic BRTI ticks (1 Hz or sub-second), synthetic Kalshi contract candles
-(END-labelled, like production) and a table-keyed fake QuestDB HTTP server."""
+(END-labelled, like production) and a fake chud-money API serving both tables as SSE."""
 
 from __future__ import annotations
 
-import base64
 import json
 import math
-import re
 import threading
 from datetime import date, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -17,6 +15,7 @@ import numpy as np
 import polars as pl
 import pytest
 
+from chud_predictor.api import CONTRACT_NUMERIC
 from chud_predictor.settings import Settings
 
 DAY = timedelta(days=1)
@@ -149,15 +148,70 @@ def write_raw(ticks: pl.DataFrame, raw_dir: Path) -> None:
 
 
 # ---------------------------------------------------------------------------------------------
-# fake QuestDB
+# fake chud-money API (Server-Sent Events)
 
-class FakeQuestDB:
+TS_FMT = "%Y-%m-%dT%H:%M:%S%.6fZ"           # what QuestDB prints and the API passes through
+#: `questdb.tables` role -> table name, as `feeds::summary::QuestdbSummary` serialises it.
+ROLES = {
+    "live": "index_values_live",
+    "hist": BRTI_TABLE,
+    "contracts": CONTRACT_TABLE,
+    "contract_ticker": "contract_ticker_live",
+    "contract_book": "contract_book_live",
+}
+#: URL segment -> table (the API also accepts the bare table name).
+ALIASES = {"index-hist": BRTI_TABLE, "candles": CONTRACT_TABLE, BRTI_TABLE: BRTI_TABLE, CONTRACT_TABLE: CONTRACT_TABLE}
+KEYS = {BRTI_TABLE: ("index_id", "BRTI"), CONTRACT_TABLE: ("series_ticker", "KXBTC15M")}
+#: Every column the API sends, in DDL order (`ts` last) - more than the downloader keeps.
+WIRE_COLUMNS = {
+    BRTI_TABLE: ("index_id", "source", "value", "received_at", "ts"),
+    CONTRACT_TABLE: ("ticker", "series_ticker", "source", *CONTRACT_NUMERIC, "ts"),
+}
+
+
+class StaticToken:
+    """Stand-in for `auth.TokenProvider` (the real one is not imported by these tests)."""
+
+    def __init__(self, token: str = "tok-1") -> None:
+        self._token = token
+        self.calls = 0
+        self.invalidated = 0
+
+    def token(self) -> str:
+        self.calls += 1
+        return self._token
+
+    def invalidate(self) -> None:
+        self.invalidated += 1
+        self._token = f"tok-{self.invalidated + 1}"
+
+
+class FakeChudApi:
+    """The two exported tables over the real wire shape: `GET /healthz`, `GET /{tag}` and
+    `GET /{tag}/data/{alias}` as SSE (`meta`, `row`*, `done` | `error`)."""
+
     def __init__(self) -> None:
+        self.tag = "btc-15m"
         self.tables: dict[str, dict[date, pl.DataFrame]] = {BRTI_TABLE: {}, CONTRACT_TABLE: {}}
-        self.fail_next: int = 0                  # number of /exp requests to fail with 500
-        self.truncate_day: date | None = None    # serve this day short by 100 rows
-        self.requests: list[str] = []
+        self.valid_token: str | None = None      # None: any bearer is accepted
+        self.fail_next: int = 0                  # data requests to answer with 500
+        self.error_next: int = 0                 # ... with meta + half the rows + `error`, no `done`
+        self.throttle_next: int = 0              # ... with 429
+        self.retry_after: str | None = None      # `Retry-After` on those 429s (the real API sends none)
+        self.max_concurrent: int | None = None   # mimics DATA_STREAMS: 429 beyond this many at once
+        self.truncate_day: date | None = None    # serve this day 100 rows short, `done.rows` honest
+        self.truncate_reported: date | None = None   # ... short, but `done.rows` claims the full day
+        self.keepalive: bool = False             # emit `:` keep-alive comments between frames
+        self.tables_null: bool = False           # `questdb.tables: null`, as before the first refresh
+        self.summary_error: str | None = None
+        self.nan_cell: tuple[str, int] | None = None  # (column, row index within the day) -> NaN -> null
+        self.requests: list[tuple[str, dict]] = []
         self.auth_seen: list[str | None] = []
+        self.active = 0
+        self.peak = 0
+        self.lock = threading.Lock()
+
+    # -- rows ------------------------------------------------------------------------
 
     @property
     def days(self) -> dict[date, pl.DataFrame]:
@@ -174,95 +228,179 @@ class FakeQuestDB:
         days = self.tables[table]
         return pl.concat([days[d] for d in sorted(days)]).sort("ts") if days else None
 
+    # -- what the handler serves -----------------------------------------------------
 
-TS_RE = re.compile(r"'(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6})Z'")
-FROM_RE = re.compile(r"\bFROM\s+(\w+)")
-SELECT_RE = re.compile(r"^SELECT\s+(.*?)\s+FROM\s", re.S)
+    def summary(self, table: str) -> dict:
+        rows = self.all_rows(table) if table in self.tables else None
+        if rows is None:
+            return {"table": table, "rows": 0, "first_ts": None, "last_ts": None}
+        return {"table": table, "rows": rows.height, "first_ts": _fmt(rows["ts"].min()), "last_ts": _fmt(rows["ts"].max())}
 
+    def market_detail(self) -> dict:
+        tables = None if self.tables_null else {role: self.summary(t) for role, t in ROLES.items()} | {
+            "coinbase_ticker": None, "coinbase_book": None,
+        }
+        return {
+            "market": {"tag": self.tag, "series_ticker": "KXBTC15M", "index_id": "BRTI", "title": "fake",
+                       "created_at": "2025-09-17T00:00:00Z"},
+            "feed": {"tag": self.tag, "running": True},
+            "questdb": {"tables": tables, "refreshed_at": "2026-09-17T02:00:30.123456789Z", "error": self.summary_error},
+        }
 
-def _parse(s: str) -> datetime:
-    return datetime.strptime(s, "%Y-%m-%dT%H:%M:%S.%f")
+    def wire(self, table: str, lo: datetime, hi: datetime) -> list[str]:
+        """The `row` bodies for `[lo, hi)`: every API column, timestamps as RFC3339 text and
+        non-finite doubles as `null` (what `questdb::row_json` does)."""
+        rows = self.all_rows(table)
+        df = rows.filter((pl.col("ts") >= lo) & (pl.col("ts") < hi)) if rows is not None else None
+        if df is None or df.is_empty():
+            return []
+        if table == BRTI_TABLE:
+            df = df.select(
+                pl.lit("BRTI").alias("index_id"), pl.lit("fake").alias("source"), "value",
+                (pl.col("ts") + pl.duration(milliseconds=5)).dt.strftime(TS_FMT).alias("received_at"),
+                pl.col("ts").dt.strftime(TS_FMT).alias("ts"),
+            )
+        else:
+            df = df.select(
+                "ticker", pl.lit("KXBTC15M").alias("series_ticker"), pl.lit("fake").alias("source"),
+                *CONTRACT_NUMERIC, pl.col("ts").dt.strftime(TS_FMT).alias("ts"),
+            )
+        if self.nan_cell is not None:
+            col, i = self.nan_cell
+            df = df.with_columns(
+                pl.when(pl.int_range(pl.len()) == i).then(pl.lit(float("nan"))).otherwise(pl.col(col)).alias(col)
+            )
+        return df.write_ndjson().splitlines()
 
 
 def _fmt(t: datetime) -> str:
     return t.strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
 
 
-def make_handler(db: FakeQuestDB):
+def _parse(s: str) -> datetime:
+    return datetime.fromisoformat(s.replace("Z", "+00:00")).replace(tzinfo=None)
+
+
+def make_handler(db: FakeChudApi):
     class Handler(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.0"        # close-delimited bodies: no Content-Length on the stream
+
         def log_message(self, *a) -> None:  # noqa: ANN002
             pass
 
-        def _send(self, code: int, body: bytes, ctype: str) -> None:
+        def _send(self, code: int, body: bytes, ctype: str, headers: dict[str, str] | None = None) -> None:
             self.send_response(code)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
+            for k, v in (headers or {}).items():
+                self.send_header(k, v)
             self.end_headers()
             self.wfile.write(body)
 
+        def _error(self, code: int, message: str, headers: dict[str, str] | None = None) -> None:
+            self._send(code, json.dumps({"error": message}).encode(), "application/json", headers)
+
         def do_GET(self) -> None:  # noqa: N802
             url = urlparse(self.path)
-            q = parse_qs(url.query).get("query", [""])[0]
-            db.requests.append(q)
+            params = {k: v[0] for k, v in parse_qs(url.query).items()}
+            db.requests.append((url.path, params))
             db.auth_seen.append(self.headers.get("Authorization"))
-            if url.path == "/exec":
-                self._exec(q)
-            elif url.path == "/exp":
-                self._exp(q)
-            else:
-                self._send(404, b"nope", "text/plain")
+            parts = [p for p in url.path.split("/") if p]
+            if parts == ["healthz"]:
+                return self._send(200, b"ok", "text/plain")
+            if not parts or parts[0] != db.tag:
+                return self._error(404, f"market '{parts[0] if parts else ''}'")
+            if len(parts) == 1:
+                return self._send(200, json.dumps(db.market_detail()).encode(), "application/json")
+            if len(parts) != 3 or parts[1] != "data":
+                return self._error(404, f"no route for {url.path}")
+            self._data(parts[2], params)
 
-        def _json(self, columns: list[tuple[str, str]], rows: list[list]) -> None:
-            body = json.dumps({"query": "", "columns": [{"name": n, "type": t} for n, t in columns], "dataset": rows, "count": len(rows)})
-            self._send(200, body.encode(), "application/json")
+        # -- GET /{tag}/data/{alias} -------------------------------------------------
 
-        def _exec(self, q: str) -> None:
-            if q.startswith("SELECT build"):
-                return self._json([("build", "STRING")], [["fake-1"]])
-            if "tables()" in q:
-                return self._json([("table_name", "STRING")], [[t] for t in sorted(db.tables)])
-            m = FROM_RE.search(q)
-            table = m.group(1) if m else ""
-            if table not in db.tables:
-                return self._send(200, json.dumps({"query": q, "error": f"table does not exist [table={table}]"}).encode(), "application/json")
-            rows_all = db.all_rows(table)
-            if q.startswith("SELECT count(), min(ts), max(ts)"):
-                cols = [("count()", "LONG"), ("min(ts)", "TIMESTAMP"), ("max(ts)", "TIMESTAMP")]
-                if rows_all is None:
-                    return self._json(cols, [[0, None, None]])
-                return self._json(cols, [[rows_all.height, _fmt(rows_all["ts"].min()), _fmt(rows_all["ts"].max())]])
-            if "SAMPLE BY 1d" in q:
-                upto = _parse(TS_RE.findall(q)[0])
-                out = []
-                for d in sorted(db.tables[table]):
-                    n = db.tables[table][d].filter(pl.col("ts") < upto).height
-                    if n:
-                        out.append([_fmt(datetime(d.year, d.month, d.day)), n])
-                return self._json([("ts", "TIMESTAMP"), ("n", "LONG")], out)
-            return self._send(200, json.dumps({"query": q, "error": "unsupported in fake"}).encode(), "application/json")
+        def _data(self, alias: str, params: dict[str, str]) -> None:
+            auth = self.headers.get("Authorization") or ""
+            token = auth.removeprefix("Bearer ") if auth.startswith("Bearer ") else None
+            if not token or (db.valid_token is not None and token != db.valid_token):
+                return self._error(401, "missing or invalid access token", {"WWW-Authenticate": "Bearer"})
+            table = ALIASES.get(alias)
+            if table is None:
+                return self._error(404, f"table '{alias}'; known tables: {', '.join(sorted(ALIASES))}")
+            start, end = params.get("start"), params.get("end")
+            if start and end and _parse(start) >= _parse(end):
+                return self._error(400, "start must be before end")
+            with db.lock:
+                if db.throttle_next > 0:
+                    db.throttle_next -= 1
+                    return self._error(429, "at most 2 data streams may run at once",
+                                       {"Retry-After": db.retry_after} if db.retry_after else None)
+                if db.fail_next > 0:
+                    db.fail_next -= 1
+                    return self._error(500, "questdb query failed: boom")
+                if db.max_concurrent is not None and db.active >= db.max_concurrent:
+                    return self._error(429, f"at most {db.max_concurrent} data streams may run at once")
+                broken = db.error_next > 0
+                if broken:
+                    db.error_next -= 1
+                db.active += 1
+                db.peak = max(db.peak, db.active)
+            try:
+                self._stream(table, start, end, broken)
+            finally:
+                with db.lock:
+                    db.active -= 1
 
-        def _exp(self, q: str) -> None:
-            if db.fail_next > 0:
-                db.fail_next -= 1
-                return self._send(500, b"boom", "text/plain")
-            table = FROM_RE.search(q).group(1)
-            cols = [c.strip() for c in SELECT_RE.search(q).group(1).split(",")][1:]   # first item is cast(ts as long) AS ts_us
-            lo, hi = (_parse(s) for s in TS_RE.findall(q)[:2])
-            rows_all = db.all_rows(table)
-            df = rows_all.filter((pl.col("ts") >= lo) & (pl.col("ts") < hi)) if rows_all is not None else pl.DataFrame({"ts": []})
-            if db.truncate_day is not None and lo.date() == db.truncate_day:
-                df = df.head(max(0, df.height - 100))
-            if df.is_empty():
-                return self._send(200, (",".join(["ts_us", *cols]) + "\n").encode(), "text/csv")
-            out = df.select(pl.col("ts").dt.epoch("us").alias("ts_us"), *cols)
-            self._send(200, out.write_csv().encode(), "text/csv")   # nulls -> empty fields, like QuestDB
+        def _stream(self, table: str, start: str | None, end: str | None, broken: bool) -> None:
+            rows = db.all_rows(table)
+            lo = _parse(start) if start else (rows["ts"].min() if rows is not None else datetime(1970, 1, 1))
+            hi = _parse(end) if end else ((rows["ts"].max() + timedelta(microseconds=1)) if rows is not None else datetime(1970, 1, 1))
+            lines = db.wire(table, lo, hi)
+            full = len(lines)
+            if db.truncate_day == lo.date() or db.truncate_reported == lo.date():
+                lines = lines[: max(0, full - 100)]
+            reported = full if db.truncate_reported == lo.date() else len(lines)
+            key_column, key = KEYS[table]
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            try:
+                self._frame("meta", {"table": table, "key_column": key_column, "key": key, "start": _fmt(lo),
+                                     "end": _fmt(hi), "columns": list(WIRE_COLUMNS[table])}, retry=10_000)
+                cut = len(lines) // 2 if broken else len(lines)
+                for i, line in enumerate(lines[:cut]):
+                    if db.keepalive and i % 500 == 0:
+                        self.wfile.write(b":\r\n\r\n")
+                    self._frame_raw("row", line, ident=json.loads(line)["ts"])
+                    if i % 256 == 0:
+                        self.wfile.flush()
+                if broken:
+                    last = json.loads(lines[cut - 1])["ts"] if cut else None
+                    self._frame("error", {"error": "questdb query failed: connection reset", "rows": cut, "resume_from": last})
+                else:
+                    self._frame("done", {"rows": reported, "start": _fmt(lo), "end": _fmt(hi), "elapsed_ms": 1})
+                self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):    # the client stops reading after `done`
+                pass
+
+        def _frame(self, name: str, data: dict, *, ident: str | None = None, retry: int | None = None) -> None:
+            self._frame_raw(name, json.dumps(data), ident=ident, retry=retry)
+
+        def _frame_raw(self, name: str, data: str, *, ident: str | None = None, retry: int | None = None) -> None:
+            # Field order is axum's: the builder appends as it is called (`event`, `data`, then `id`/`retry`).
+            out = f"event: {name}\ndata: {data}\n"
+            if ident is not None:
+                out += f"id: {ident}\n"
+            if retry is not None:
+                out += f"retry: {retry}\n"
+            self.wfile.write((out + "\n").encode())
 
     return Handler
 
 
 @pytest.fixture
-def fake_qdb():
-    db = FakeQuestDB()
+def fake_api():
+    db = FakeChudApi()
     server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(db))
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -273,9 +411,19 @@ def fake_qdb():
 
 
 @pytest.fixture
-def settings(fake_qdb, tmp_path: Path) -> Settings:
-    return Settings(qdb_host="127.0.0.1", qdb_port=fake_qdb.port, qdb_user="admin", qdb_password="pw", data_dir=tmp_path / "data")
+def tokens() -> StaticToken:
+    return StaticToken()
 
 
-def basic_auth_header(user: str, pw: str) -> str:
-    return "Basic " + base64.b64encode(f"{user}:{pw}".encode()).decode()
+@pytest.fixture
+def settings(fake_api, tmp_path: Path) -> Settings:
+    return Settings(api_base=f"http://127.0.0.1:{fake_api.port}", market_tag="btc-15m", data_dir=tmp_path / "data")
+
+
+@pytest.fixture
+def api(settings, tokens):
+    """`ChudApi` against the fake server, with the retry backoff neutralised."""
+    from chud_predictor.api import ChudApi
+
+    with ChudApi(settings, tokens, sleep=lambda _s: None) as client:
+        yield client

@@ -2,13 +2,12 @@
 .env
 .env.*
 !.env.example
+.auth/
 
 # data, model weights, run state
 data/
 models/
 outputs/
-.run/
-*.pid
 
 # python
 .venv/

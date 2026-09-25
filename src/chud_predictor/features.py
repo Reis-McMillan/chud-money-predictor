@@ -96,7 +96,7 @@ def build_frame_from(bars: pl.DataFrame, candles: pl.DataFrame | None, vol_lookb
         c = c.unique(subset=["bar_ts"], keep="last").rename({f"price_{s}": f"trade_{s}" for s in ("open", "high", "low", "close", "mean")})
         frame = frame.join(c, left_on="ts", right_on="bar_ts", how="left")
     else:
-        from .qdb import CONTRACT_NUMERIC
+        from .api import CONTRACT_NUMERIC
 
         empty = {c.replace("price_", "trade_"): pl.lit(None, dtype=pl.Float64) for c in CONTRACT_NUMERIC}
         frame = frame.with_columns(pl.lit(None, dtype=pl.Utf8).alias("ticker"), **empty)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import tomllib
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -13,8 +13,10 @@ import typer
 from .settings import Settings, load_settings
 
 app = typer.Typer(add_completion=False, no_args_is_help=True, help="TimesFM 3.0 forecasts of the Kalshi KXBTC15M contract price.")
-qdb_app = typer.Typer(help="QuestDB inspection.")
-app.add_typer(qdb_app, name="qdb")
+api_app = typer.Typer(help="chud-money API inspection.")
+auth_app = typer.Typer(help="Verys login for the chud-money API.")
+app.add_typer(api_app, name="api")
+app.add_typer(auth_app, name="auth")
 
 _state: dict[str, Any] = {"settings": None, "config": {}}
 log = logging.getLogger("chudp")
@@ -39,6 +41,10 @@ def _date(s: str | None) -> date | None:
     return date.fromisoformat(s) if s else None
 
 
+def _utcnow() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
+
+
 @app.callback()
 def main(
     config: Annotated[Path | None, typer.Option("--config", help="TOML config; also accepted after the sub-command")] = None,
@@ -53,21 +59,165 @@ def main(
 
 
 # ---------------------------------------------------------------------------------------------
+# auth
 
-@qdb_app.command("info")
-def qdb_info() -> None:
-    """Row counts, time bounds and per-day coverage of both source tables."""
-    from .qdb import SOURCES, QuestDB
+def _fail(msg: str, code: int = 2) -> None:
+    typer.secho(msg, fg=typer.colors.RED, err=True)
+    raise typer.Exit(code=code)
 
-    q = QuestDB(_settings())
-    typer.echo(f"questdb {q.ping()} at {_settings().qdb_url}; tables: {', '.join(q.tables())}")
+
+def _provider():
+    from .auth import token_provider
+
+    return token_provider(_settings())
+
+
+def _report_session(session) -> None:  # noqa: ANN001
+    typer.echo(f"saved {_settings().auth_file} (mode 600): {session.email}, roles {', '.join(session.roles) or 'none'}")
+
+
+@auth_app.command("login")
+def auth_login(
+    email: Annotated[str | None, typer.Option(help="Verys account email")] = None,
+    code: Annotated[str | None, typer.Option(help="the emailed 6-digit code (skips the prompt)")] = None,
+    force: Annotated[bool, typer.Option("--force", help="ignore the saved session cookies and ask for a new code")] = False,
+) -> None:
+    """Sign in to Verys once (email + emailed code) and save a session that `chudp` renews unattended."""
+    from .auth import AuthError, Session, VerysClient, mint_session
+
+    s = _settings()
+    kw = dict(audience=s.chud_money_client_id, redirect_uri=s.verys_redirect_uri, verys_url=s.verys_url, client_id=s.verys_client_id)
+    try:
+        if not force and s.auth_file.exists():
+            # A saved 60-day cookie can mint a fresh refresh token with no email round trip.
+            old = Session.load(s.auth_file)
+            try:
+                with VerysClient(s.verys_url, s.verys_client_id, cookies=old.cookies) as c:
+                    session = mint_session(c, email=email or old.email, cookies=old.cookies, logged_in_at=old.logged_in_at, **kw)
+                session.save(s.auth_file)
+                typer.echo(f"reused the saved Verys session for {session.email}; no code needed")
+                return _report_session(session)
+            except AuthError as e:
+                log.info("saved session unusable (%s); asking for a code", e)
+                email = email or old.email
+        email = email or typer.prompt("Verys email")
+        with VerysClient(s.verys_url, s.verys_client_id) as c:
+            c.send_code(email)
+            typer.echo(f"a 6-digit code was emailed to {email} (valid 5 minutes)")
+            code = code or typer.prompt("code")
+            c.verify_code(email, code.strip())
+            session = mint_session(c, email=email, cookies=c.cookies, logged_in_at=_utcnow(), **kw)
+        session.save(s.auth_file)
+        _report_session(session)
+    except AuthError as e:
+        _fail(str(e))
+
+
+@auth_app.command("status")
+def auth_status() -> None:
+    """The saved session, and whether it still yields a token the API accepts."""
+    from .auth import AuthError, Session, claims
+
+    s = _settings()
+    try:
+        session = Session.load(s.auth_file)
+    except AuthError as e:
+        _fail(str(e))
+    mode = oct(s.auth_file.stat().st_mode & 0o777)
+    typer.echo(f"session   {s.auth_file} ({mode})")
+    typer.echo(f"identity  {session.email}  sub {session.sub}")
+    typer.echo(f"verys     {session.verys_url}  client {session.client_id}  audience {session.audience}")
+    typer.echo(f"refresh   token age {session.refresh_age} (rotated {session.obtained_at}, login {session.logged_in_at})")
+    try:
+        tok = _provider().token()
+    except AuthError as e:
+        _fail(f"exchange  FAILED: {e}", code=1)
+    c = claims(tok)
+    exp = datetime.fromtimestamp(c["exp"], UTC).replace(tzinfo=None)
+    typer.echo(f"exchange  ok: roles {c.get('roles')}, aud {c.get('aud')}, exp {exp} (in {exp - _utcnow()})")
+
+
+@auth_app.command("token")
+def auth_token(decode: Annotated[bool, typer.Option("--decode", help="print the (unverified) claims instead")] = False) -> None:
+    """Print a valid chud-money access token on stdout (for `curl -H "Authorization: Bearer $(chudp auth token)"`)."""
+    import json
+
+    from .auth import AuthError, claims
+
+    try:
+        tok = _provider().token()
+    except AuthError as e:
+        _fail(str(e))
+    typer.echo(json.dumps(claims(tok), indent=1) if decode else tok)
+
+
+@auth_app.command("refresh")
+def auth_refresh() -> None:
+    """Force one renewal cycle: refresh the Verys token (or re-authorize from the saved cookie) and exchange."""
+    from .auth import AuthError, Session
+
+    s = _settings()
+    try:
+        before = Session.load(s.auth_file).refresh_token
+        p = _provider()
+        p.invalidate()
+        p.token()
+        after = Session.load(s.auth_file).refresh_token
+    except AuthError as e:
+        _fail(str(e))
+    typer.echo("renewed: exchanged a new token; refresh token " + ("rotated" if before != after else "unchanged"))
+
+
+@auth_app.command("logout")
+def auth_logout() -> None:
+    """Revoke our refresh token and delete the session file. The browser SPA's own session is untouched."""
+    from .auth import AuthError, Session, VerysClient
+
+    s = _settings()
+    try:
+        session = Session.load(s.auth_file)
+    except AuthError as e:
+        _fail(str(e))
+    with VerysClient(session.verys_url, session.client_id) as c:
+        c.revoke(session.refresh_token)
+    s.auth_file.unlink(missing_ok=True)
+    s.auth_file.with_suffix(".lock").unlink(missing_ok=True)
+    typer.echo(f"revoked the refresh token and deleted {s.auth_file}")
+
+
+# ---------------------------------------------------------------------------------------------
+# data
+
+def _api():
+    from .api import ChudApi
+
+    return ChudApi(_settings(), tokens=_provider())
+
+
+@api_app.command("info")
+def api_info() -> None:
+    """Row counts and time bounds of both source tables from the API, and the local raw coverage."""
+    from .api import SOURCES
+    from .download import MANIFEST_NAME, Manifest, candidate_days
+
+    api = _api()          # /{tag} and /healthz are public: no token is fetched here
+    detail = api.market()
+    m, qdb = detail["market"], detail.get("questdb") or {}
+    typer.echo(f"{_settings().api_base} {api.health()}; market {m['tag']} (index {m['index_id']}, series {m['series_ticker']}); "
+               f"summary refreshed {qdb.get('refreshed_at')}" + (f" [error: {qdb['error']}]" if qdb.get("error") else ""))
     for spec in SOURCES.values():
-        b = q.bounds(spec)
-        typer.echo(f"[{spec.name}] {spec.table} where {spec.where}: {b.rows:,} rows, {b.min_ts} .. {b.max_ts}")
-        if b.max_ts:
-            counts = q.day_counts(spec, b.max_ts)
-            vals = sorted(counts.values())
-            typer.echo(f"    {len(counts)} days; rows/day min {vals[0]:,}, median {vals[len(vals) // 2]:,}, max {vals[-1]:,}")
+        b = api.bounds(spec)
+        typer.echo(f"[{spec.name}] {spec.table} ({spec.key_column}={spec.key}): {b.rows:,} rows, {b.min_ts} .. {b.max_ts}")
+        man = Manifest.load(_settings().raw_dir_for(spec.name) / MANIFEST_NAME)
+        done = man.complete_days()
+        local = sum(r.rows for r in man.days.values())
+        line = f"    local: {len(man.days)} days ({len(done)} complete), {local:,} rows"
+        if done:
+            line += f", {done[0]} .. {done[-1]}"
+        if b.min_ts and b.max_ts:
+            n_all = len(candidate_days(b.min_ts, b.max_ts + timedelta(microseconds=1)))
+            line += f"; {max(0, n_all - len(man.days))} of {n_all} days not downloaded"
+        typer.echo(line)
 
 
 @app.command()
@@ -75,21 +225,21 @@ def download(
     source: Annotated[str, typer.Option(help="both | brti | contracts")] = "both",
     start: Annotated[str | None, typer.Option(help="first UTC day, YYYY-MM-DD")] = None,
     end: Annotated[str | None, typer.Option(help="last UTC day, YYYY-MM-DD")] = None,
-    jobs: int = 4,
+    jobs: Annotated[int, typer.Option(help="concurrent day streams; the API allows 2 in total")] = 1,
     force: bool = False,
     verify_only: bool = False,
 ) -> None:
     """Pull raw rows into data/raw/<source>/date=YYYY-MM-DD.parquet (incremental, idempotent)."""
+    from .api import SOURCES
     from .download import download as _download
-    from .qdb import SOURCES, QuestDB
 
     names = list(SOURCES) if source == "both" else [source]
     if any(n not in SOURCES for n in names):
         raise typer.BadParameter(f"source must be one of both, {', '.join(SOURCES)}")
-    q = QuestDB(_settings())
+    api = _api()
     failed = False
     for name in names:
-        rep = _download(q, _settings().raw_dir_for(name), SOURCES[name], start=_date(start), end=_date(end), jobs=jobs, force=force, verify_only=verify_only)
+        rep = _download(api, _settings().raw_dir_for(name), SOURCES[name], start=_date(start), end=_date(end), jobs=jobs, force=force, verify_only=verify_only)
         if verify_only:
             typer.echo(f"[{name}] would fetch {len(rep.planned)} days: {', '.join(d.isoformat() for d in rep.planned[:10])}{' ...' if len(rep.planned) > 10 else ''}")
         typer.echo(rep.summary())

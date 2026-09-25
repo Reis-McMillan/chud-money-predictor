@@ -23,7 +23,7 @@ DAY2 = date(2025, 12, 21)
 
 @pytest.fixture(scope="module")
 def settings(contract_world, tmp_path_factory) -> Settings:
-    s = Settings(data_dir=tmp_path_factory.mktemp("bt") / "data", qdb_password="x")
+    s = Settings(data_dir=tmp_path_factory.mktemp("bt") / "data")
     write_raw(contract_world["ticks"], s.raw_dir)
     write_raw(contract_world["candles"], s.contracts_raw_dir)
     build(s.raw_dir, s.processed_dir, "1m")

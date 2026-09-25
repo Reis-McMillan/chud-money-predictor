@@ -1,14 +1,19 @@
-"""Incremental, idempotent download of a QuestDB source table into one Parquet file per UTC day.
+"""Incremental, idempotent download of one chud-money API table into a Parquet file per UTC day.
 
-Works for any `qdb.TableSpec` (BRTI ticks, Kalshi contract candles). Correctness rules:
-1. Snapshot `max_ts` first; every query is bounded by `ts < snapshot_max_ts`, so a backfill that
-   is running concurrently cannot change what a single run sees.
-2. Re-fetch: days missing from the manifest, the (partial) day containing the snapshot, and any
-   day whose QuestDB row count no longer matches the manifest.
-3. Verify each day's row count against `SAMPLE BY 1d`; a mismatch is retried once, then recorded
-   as incomplete and re-planned on the next run. The check is count-agnostic, so the 1 Hz -> 5 Hz
-   density change of the index table needs no special handling.
-4. Parquet files are written atomically (tmp + os.replace); the manifest is saved after every day.
+Works for any `api.TableSpec` (BRTI ticks, Kalshi contract candles). Correctness rules, given that
+the API exposes no per-day row counts:
+1. Snapshot the table's `max_ts` first (from `GET /{tag}`, up to 60 s stale); every request is
+   bounded by `ts < snapshot_max_ts`, so a concurrent backfill cannot change what one run sees.
+2. Candidate days are the closed range `first_ts.date() .. (snapshot - 1 µs).date()`, clipped by
+   `--start/--end`. A day with no rows is requested once and recorded with `rows=0` and no file.
+3. A day is verified by its own stream: a terminal `done` event whose `rows` equals the rows parsed
+   (`DayFetch.ok`). That is *transport integrity only* - it proves nothing about what QuestDB holds,
+   so a server-side rewrite of a day already marked complete is **not** detected. `--force` is the
+   escape hatch. The check is count-agnostic, so the 1 Hz -> 5 Hz density change needs no handling.
+4. Re-fetch: days missing from the manifest, any day not `complete`, the tail day (the one holding
+   the snapshot), a lost Parquet file for a day known to be non-empty, and everything under `--force`.
+5. Parquet files are written atomically (tmp + os.replace) and never deleted; the manifest is saved
+   after every day. A day the API now reports as empty keeps its existing file, with a warning.
 """
 
 from __future__ import annotations
@@ -18,17 +23,16 @@ import logging
 import os
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
-import polars as pl
-
-from .qdb import BRTI, QuestDB, TableSpec
+from .api import BRTI, ChudApi, TableSpec
 
 log = logging.getLogger(__name__)
 
 MANIFEST_NAME = "_manifest.json"
+MANIFEST_VERSION = 2
 
 
 def day_path(out_dir: Path, day: date) -> Path:
@@ -39,36 +43,53 @@ def day_path(out_dir: Path, day: date) -> Path:
 class DayRecord:
     day: str
     rows: int
-    qdb_count: int
-    min_ts: str | None
-    max_ts: str | None
-    complete: bool
-    snapshot_ts: str
-    downloaded_at: str
-    bytes: int
+    api_rows: int | None = None      # the server's own `done.rows`; None when the stream never finished
+    min_ts: str | None = None
+    max_ts: str | None = None
+    complete: bool = False
+    snapshot_ts: str = ""
+    downloaded_at: str = ""
+    bytes: int = 0
 
 
 @dataclass
 class Manifest:
+    version: int = MANIFEST_VERSION
     table: str = BRTI.table
-    filter_sql: str | None = BRTI.where
+    alias: str = BRTI.alias
+    tag: str = ""
     days: dict[str, DayRecord] = field(default_factory=dict)
 
     @classmethod
     def load(cls, path: Path) -> Manifest:
+        """Reads v1 (QuestDB era) too: `qdb_count` becomes `api_rows`, `filter_sql`/`index_id` are
+        dropped, unknown keys are ignored and `complete` is kept, so existing files are not refetched."""
         if not path.exists():
             return cls()
         raw = json.loads(path.read_text())
-        days = {k: DayRecord(**v) for k, v in raw.get("days", {}).items()}
-        # manifests written before the two-source downloader carry `index_id` instead of `filter_sql`
-        filter_sql = raw.get("filter_sql") or (f"index_id = '{raw['index_id']}'" if raw.get("index_id") else None)
-        return cls(table=raw.get("table", BRTI.table), filter_sql=filter_sql, days=days)
+        known = {f.name for f in fields(DayRecord)}
+        days: dict[str, DayRecord] = {}
+        for key, value in (raw.get("days") or {}).items():
+            rec = dict(value)
+            if "api_rows" not in rec and "qdb_count" in rec:
+                rec["api_rows"] = rec["qdb_count"]
+            days[key] = DayRecord(**{k: v for k, v in rec.items() if k in known})
+        return cls(
+            version=int(raw.get("version", 1)),
+            table=raw.get("table", BRTI.table),
+            alias=raw.get("alias", ""),
+            tag=raw.get("tag", ""),
+            days=days,
+        )
 
     def save(self, path: Path) -> None:
+        self.version = MANIFEST_VERSION
         path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
+            "version": self.version,
             "table": self.table,
-            "filter_sql": self.filter_sql,
+            "alias": self.alias,
+            "tag": self.tag,
             "days": {k: asdict(v) for k, v in sorted(self.days.items())},
         }
         tmp = path.with_suffix(".json.tmp")
@@ -87,121 +108,131 @@ class DownloadReport:
     fetched: list[date]
     up_to_date: int
     incomplete: list[date]
+    empty: list[date]
     failed: dict[str, str]
 
     def summary(self) -> str:
         return (
             f"[{self.source}] {len(self.fetched)} days fetched, {self.up_to_date} up to date, "
-            f"{len(self.incomplete)} incomplete, {len(self.failed)} failed "
+            f"{len(self.empty)} empty, {len(self.incomplete)} incomplete, {len(self.failed)} failed "
             f"(snapshot max ts {self.snapshot_max_ts})"
         )
 
 
-def plan_days(
-    manifest: Manifest,
-    day_counts: dict[date, int],
+def candidate_days(
+    first_ts: datetime | None,
     snapshot_max_ts: datetime,
     start: date | None = None,
     end: date | None = None,
+) -> list[date]:
+    """Every UTC day the table can hold rows for: `first_ts` .. the snapshot day, clipped."""
+    if first_ts is None:
+        return []
+    lo = max(first_ts.date(), start) if start else first_ts.date()
+    hi = (snapshot_max_ts - timedelta(microseconds=1)).date()
+    if end and end < hi:
+        hi = end
+    out: list[date] = []
+    day = lo
+    while day <= hi:
+        out.append(day)
+        day += timedelta(days=1)
+    return out
+
+
+def plan_days(
+    manifest: Manifest,
+    days: list[date],
+    snapshot_max_ts: datetime,
     force: bool = False,
     out_dir: Path | None = None,
 ) -> list[date]:
-    """Days that need (re)fetching. `day_counts` covers ts < snapshot_max_ts."""
-    snapshot_day = snapshot_max_ts.date()
+    """Which of `days` need (re)fetching; see rule 4 in the module docstring."""
+    tail = (snapshot_max_ts - timedelta(microseconds=1)).date()
     planned: list[date] = []
-    for day, n in sorted(day_counts.items()):
-        if n <= 0:
-            continue
-        if start and day < start:
-            continue
-        if end and day > end:
-            continue
+    for day in days:
         rec = manifest.days.get(day.isoformat())
-        file_missing = out_dir is not None and not day_path(out_dir, day).exists()
-        if (
-            force
-            or rec is None
-            or file_missing
-            or not rec.complete
-            or rec.qdb_count != n
-            or day == snapshot_day
-        ):
+        file_lost = out_dir is not None and rec is not None and rec.rows > 0 and not day_path(out_dir, day).exists()
+        if force or rec is None or not rec.complete or file_lost or day >= tail:
             planned.append(day)
     return planned
 
 
-def download_day(qdb: QuestDB, spec: TableSpec, day: date, snapshot_max_ts: datetime, expected: int, out_dir: Path) -> DayRecord:
-    day_start = datetime(day.year, day.month, day.day)
-    day_end = day_start + timedelta(days=1)
-    df: pl.DataFrame | None = None
-    for attempt in (1, 2):
-        df = qdb.fetch_day(spec, day, snapshot_max_ts)
-        if len(df) == expected:
-            break
-        log.warning("[%s] %s: got %d rows, QuestDB reports %d (attempt %d)", spec.name, day, len(df), expected, attempt)
-    assert df is not None
+def download_day(api: ChudApi, spec: TableSpec, day: date, snapshot_max_ts: datetime, out_dir: Path) -> DayRecord:
+    """Fetch and write one day. A 0-row day writes no file (and never deletes one)."""
+    day_end = datetime(day.year, day.month, day.day) + timedelta(days=1)
+    fetch = api.fetch_day(spec, day, snapshot_max_ts)
+    df, rows = fetch.df, fetch.df.height
     path = day_path(out_dir, day)
-    tmp = path.with_suffix(".parquet.tmp")
-    out_dir.mkdir(parents=True, exist_ok=True)
-    df.write_parquet(tmp, compression="zstd", compression_level=3, statistics=True)
-    os.replace(tmp, path)
+    if rows:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".parquet.tmp")
+        df.write_parquet(tmp, compression="zstd", compression_level=3, statistics=True)
+        os.replace(tmp, path)
+    elif path.exists():
+        log.warning("[%s] %s: the API returned no rows but %s exists; keeping it (use --force to investigate)",
+                    spec.name, day, path.name)
+    if not fetch.ok:
+        log.warning("[%s] %s: %s (%d attempts)", spec.name, day, fetch.note, fetch.attempts)
     sealed = day_end <= snapshot_max_ts
-    rows = len(df)
     return DayRecord(
         day=day.isoformat(),
         rows=rows,
-        qdb_count=expected,
+        api_rows=fetch.reported_rows,
         min_ts=df["ts"].min().isoformat() if rows else None,
         max_ts=df["ts"].max().isoformat() if rows else None,
-        complete=bool(sealed and rows == expected),
+        complete=bool(sealed and fetch.ok),
         snapshot_ts=snapshot_max_ts.isoformat(),
         downloaded_at=datetime.now(UTC).replace(tzinfo=None).isoformat(),
-        bytes=path.stat().st_size,
+        bytes=path.stat().st_size if rows else 0,
     )
 
 
 def download(
-    qdb: QuestDB,
+    api: ChudApi,
     out_dir: Path,
     spec: TableSpec = BRTI,
     *,
     start: date | None = None,
     end: date | None = None,
-    jobs: int = 4,
+    jobs: int = 1,
     force: bool = False,
     verify_only: bool = False,
 ) -> DownloadReport:
+    """One source, one directory. `jobs` defaults to 1 because the API permits 2 exports in total."""
     out_dir.mkdir(parents=True, exist_ok=True)
     manifest_path = out_dir / MANIFEST_NAME
     manifest = Manifest.load(manifest_path)
-    manifest.table, manifest.filter_sql = spec.table, spec.where
+    if manifest.days:
+        if manifest.table and manifest.table != spec.table:
+            log.warning("[%s] %s was written from table %s, not %s", spec.name, manifest_path, manifest.table, spec.table)
+        if manifest.tag and manifest.tag != api.tag:
+            log.warning("[%s] %s was written from market %s, not %s", spec.name, manifest_path, manifest.tag, api.tag)
+    manifest.table, manifest.alias, manifest.tag = spec.table, spec.alias, api.tag
 
-    bounds = qdb.bounds(spec)
+    bounds = api.bounds(spec)
     if bounds.max_ts is None or bounds.rows == 0:
-        return DownloadReport(spec.name, None, [], [], 0, [], {})
-    # Bound every query strictly below the snapshot so a concurrent backfill cannot move it.
+        return DownloadReport(spec.name, None, [], [], 0, [], [], {})
+    # Bound every request strictly below the snapshot so a concurrent backfill cannot move it.
     snapshot = bounds.max_ts + timedelta(microseconds=1)
-    counts = qdb.day_counts(spec, snapshot)
-    planned = plan_days(manifest, counts, snapshot, start, end, force, out_dir)
-    in_range = [d for d in counts if (not start or d >= start) and (not end or d <= end) and counts[d] > 0]
-    up_to_date = len(in_range) - len(planned)
+    days = candidate_days(bounds.min_ts, snapshot, start, end)
+    planned = plan_days(manifest, days, snapshot, force, out_dir)
+    up_to_date = len(days) - len(planned)
     log.info(
-        "[%s] snapshot max ts %s; %d days in QuestDB, %d planned, %d up to date",
-        spec.name, bounds.max_ts, len(in_range), len(planned), up_to_date,
+        "[%s] snapshot max ts %s; %d candidate days, %d planned, %d up to date",
+        spec.name, bounds.max_ts, len(days), len(planned), up_to_date,
     )
     if verify_only:
-        return DownloadReport(spec.name, bounds.max_ts, planned, [], up_to_date, [], {})
+        return DownloadReport(spec.name, bounds.max_ts, planned, [], up_to_date, [], [], {})
 
     fetched: list[date] = []
     incomplete: list[date] = []
+    empty: list[date] = []
     failed: dict[str, str] = {}
     lock = threading.Lock()
 
-    def work(day: date) -> DayRecord:
-        return download_day(qdb, spec, day, snapshot, counts[day], out_dir)
-
     with ThreadPoolExecutor(max_workers=max(1, jobs)) as pool:
-        futures = {pool.submit(work, d): d for d in planned}
+        futures = {pool.submit(download_day, api, spec, d, snapshot, out_dir): d for d in planned}
         for fut in as_completed(futures):
             day = futures[fut]
             try:
@@ -216,5 +247,9 @@ def download(
             fetched.append(day)
             if not rec.complete:
                 incomplete.append(day)
-            log.info("[%s] %s: %d rows (%s) %.1f KB", spec.name, day, rec.rows, "complete" if rec.complete else "partial", rec.bytes / 1024)
-    return DownloadReport(spec.name, bounds.max_ts, planned, sorted(fetched), up_to_date, sorted(incomplete), failed)
+            if rec.rows == 0:
+                empty.append(day)
+            log.info("[%s] %s: %d rows (%s) %.1f KB", spec.name, day, rec.rows,
+                     "complete" if rec.complete else "partial", rec.bytes / 1024)
+    return DownloadReport(spec.name, bounds.max_ts, planned, sorted(fetched), up_to_date,
+                          sorted(incomplete), sorted(empty), failed)

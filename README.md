@@ -2,7 +2,8 @@
 
 Multivariate [TimesFM 3.0](https://huggingface.co/google/timesfm-3.0-pytorch) forecasts of the
 **Kalshi BTC 15-minute contract price** (KXBTC15M), from the contract's own candles and the BRTI
-(CME CF Bitcoin Real-Time Index) that settles it. Data comes from the production QuestDB.
+(CME CF Bitcoin Real-Time Index) that settles it. Data comes from the chud-money API, which
+fronts the production QuestDB.
 
 Pipeline: `download` (two raw tables → one Parquet per UTC day) → `resample` (1-minute BRTI bars) →
 `frame` (bars joined with the active contract's candle) → `backtest-contract` (at every minute of
@@ -11,21 +12,47 @@ every window, forecast the price at every remaining minute; score against persis
 
 ## Data
 
-Two QuestDB tables, both cluster-internal (namespace `questdb`, no ingress):
+Two QuestDB tables, served by the chud-money API (`https://api.chud-money.mcmlln.dev`, market
+`btc-15m`) as Server-Sent Events, one request per UTC day:
 
-| source | table | what |
-|---|---|---|
-| `brti` | `index_values_hist` (`index_id='BRTI'`) | index ticks from 2025-09-17. One per second until about May 2026, five per second after. |
-| `contracts` | `contract_candles_hist` (`series_ticker='KXBTC15M'`) | 1-minute candles from 2025-12-10: YES bid/ask OHLC, trade OHLC + mean, volume, open interest, `floor_strike`. One market per 15-minute window, 15 candles each. **Candle `ts` is the END of its minute.** |
+| source | endpoint | table | what |
+|---|---|---|---|
+| `brti` | `GET /btc-15m/data/index-hist` | `index_values_hist` (`index_id='BRTI'`) | index ticks from 2025-09-17. One per second until about May 2026, five per second after. |
+| `contracts` | `GET /btc-15m/data/candles` | `contract_candles_hist` (`series_ticker='KXBTC15M'`) | 1-minute candles from 2025-12-10: YES bid/ask OHLC, trade OHLC + mean, volume, open interest, `floor_strike`. One market per 15-minute window, 15 candles each. **Candle `ts` is the END of its minute.** |
+
+The market filter is applied server-side from the tag; the client asserts the stream's `meta`
+event names the expected table, key and columns. `GET /btc-15m` (public) reports each table's row
+count and time bounds, which is where `chudp download` takes its snapshot from. The API allows two
+concurrent exports in total (the SPA may hold one), so `download` runs one stream at a time by
+default (`--jobs 2` is safe: a 429 is retried with backoff).
+
+A day is recorded complete when the stream ends with its `done` event and the server's row count
+matches what arrived; that proves the transfer, not QuestDB's contents. There are no per-day counts
+any more, so a sealed day rewritten server-side is not noticed: `download --force` (with
+`--start/--end`) refetches. A day of BRTI is about 78 MB on the wire (uncompressed), the whole
+history about 32 GB, so copying `data/raw/` between machines is still the fast way to move history.
+
+## Auth
+
+The data stream only accepts a five-minute Verys access token exchanged for the API's own
+audience, from an identity holding the `chud-money` role. `chudp` is the same public PKCE client
+as the SPA, driven headlessly:
 
 ```bash
-make creds          # kubectl secret questdb-secrets/DB_PASS -> .env (git-ignored, chmod 600)
-make pf             # kubectl port-forward svc/questdb 19000:9000 (pidfile in .run/)
+uv run chudp auth login      # email, then the 6-digit code Verys mails you (valid 5 minutes)
+uv run chudp auth status     # identity, refresh-token age, and a live token exchange
+uv run chudp auth token      # print a token, e.g. for curl -H "Authorization: Bearer $(...)"
+uv run chudp auth logout     # revoke our refresh token and delete the session file
 ```
 
-On a box without kubeconfig (the MI300X), copy `.env.example` to `.env` and paste the password
-(Oracle Vault key `qdb-password`), then either `ssh -L 19000:localhost:19000` from a machine with the
-port-forward, or copy `data/raw/` over and skip the download entirely.
+`login` writes `.auth/session.json` (chmod 600, git-ignored): the rotating refresh token **and** the
+60-day Verys browser cookie. **Treat that file as a password.** From then on every request takes a
+token from a thread-safe provider that re-exchanges 30 s before expiry and persists each rotated
+refresh token atomically. Signing out of the SPA in your browser revokes every refresh token of the
+client, ours included; `chudp` then mints a new one from the saved cookie without asking for a code.
+Only when the cookie is gone too does it say `run chudp auth login`. A 403 from the API means the
+identity lacks the role (an admin adds it with `POST {verys}/roles/chud-money/identities/<email>`).
+Run `auth login` separately on each machine rather than copying the file: sessions are independent.
 
 ## Setup
 
@@ -41,7 +68,7 @@ into `models/` (`HF_HOME`).
 ## Run
 
 ```bash
-uv run chudp qdb info
+uv run chudp api info
 uv run chudp download --source both --start 2026-09-13 --end 2026-09-16   # no range = all history
 uv run chudp resample --freq 1m
 uv run chudp frame                                   # prints the alignment / strike audit
@@ -144,7 +171,7 @@ for the 29 variates of `full_rv` (986 tokens per sample at context 1024).
 ## Tests
 
 ```bash
-uv run pytest -q                      # offline: fake QuestDB, synthetic ticks + candles, stub / tiny models
+uv run pytest -q                      # offline: fake chud-money API (SSE) + fake Verys, synthetic ticks + candles, stub / tiny models
 CHUDP_SLOW=1 uv run pytest -m slow    # loads the real weights
 uv run ruff check .
 ```

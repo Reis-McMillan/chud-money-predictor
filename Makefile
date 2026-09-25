@@ -1,17 +1,14 @@
-.PHONY: creds pf pf-stop pf-status sync-cpu sync-rocm download bars frame backtest finetune smoke test test-slow lint
+.PHONY: login whoami api-info sync-cpu sync-rocm download bars frame backtest finetune smoke test test-slow lint
 
-# --- credentials & connectivity ------------------------------------------------
-creds:            ## fetch the QuestDB password from the cluster into .env
-	./scripts/fetch-creds.sh
+# --- chud-money API ---------------------------------------------------------------
+login:            ## one-time Verys login (email + code) -> .auth/session.json, renewed unattended
+	uv run chudp auth login
 
-pf:               ## start kubectl port-forward (localhost:19000 -> questdb:9000)
-	./scripts/port-forward.sh start
+whoami:           ## saved session + a live token exchange
+	uv run chudp auth status
 
-pf-stop:
-	./scripts/port-forward.sh stop
-
-pf-status:
-	./scripts/port-forward.sh status
+api-info:         ## market summary from the API + local raw coverage
+	uv run chudp api info
 
 # --- environments --------------------------------------------------------------
 sync-cpu:         ## laptop (macOS / CPU / MPS)
